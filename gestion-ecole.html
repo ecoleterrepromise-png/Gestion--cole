@@ -2791,17 +2791,18 @@ function buildRapportFamilleCanvas(fam){
       let totalDuGlobal=0, totalVerse=0, totalRestant=0, totalArriereRestant=0;
       ctx.font = '13px Arial';
       enfants.forEach(s=>{
+        const abandon = isAbandon(s.id);
         const {totalDu, verse, restant, arriereRestant} = soldeEleve(s);
         const restantPos = Math.max(restant,0);
-        totalDuGlobal += totalDu; totalVerse += verse; totalRestant += restantPos; totalArriereRestant += arriereRestant;
+        if(!abandon){ totalDuGlobal += totalDu; totalVerse += verse; totalRestant += restantPos; totalArriereRestant += arriereRestant; }
         ctx.fillStyle = '#1B2A4A';
-        ctx.fillText(`${s.prenom} ${s.nom}`, 60, cy);
+        ctx.fillText(`${s.prenom} ${s.nom}${abandon?' (Abandon)':''}`, 60, cy);
         ctx.fillText(s.classe||'—', 320, cy);
-        ctx.fillText(formatMontant(totalDu), 430, cy);
+        ctx.fillText(abandon?'—':formatMontant(totalDu), 430, cy);
         ctx.fillStyle = '#2F6B4F';
-        ctx.fillText(formatMontant(verse), 555, cy);
+        ctx.fillText(abandon?'—':formatMontant(verse), 555, cy);
         ctx.fillStyle = restant>0 ? '#8B2635' : '#2F6B4F';
-        ctx.fillText(formatMontant(restantPos), 675, cy);
+        ctx.fillText(abandon?'—':formatMontant(restantPos), 675, cy);
         ctx.strokeStyle = '#D9D2BE'; ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(60,cy+16); ctx.lineTo(W-60,cy+16); ctx.stroke();
         cy += 50;
@@ -2874,6 +2875,7 @@ async function envoyerRapportFamilleWhatsApp(key){
   const fileName = rapportFamilleFileName(fam);
   let totalDuGlobal=0, totalVerse=0, totalRestant=0, totalArriereRestant=0;
   fam.enfants.forEach(s=>{
+    if(isAbandon(s.id)) return;
     const {totalDu, verse, restant, arriereRestant} = soldeEleve(s);
     totalDuGlobal += totalDu; totalVerse += verse; totalRestant += Math.max(restant,0); totalArriereRestant += arriereRestant;
   });
@@ -4097,7 +4099,7 @@ function renderFamilles(){
         ${(()=>{
           const reduction = state.reductionsFamille[fam.key] || 0;
           let totalRestantFamille = 0;
-          enfants.forEach(s=>{ totalRestantFamille += Math.max(soldeEleve(s).restant, 0); });
+          enfants.forEach(s=>{ if(!isAbandon(s.id)) totalRestantFamille += Math.max(soldeEleve(s).restant, 0); });
           const apresReduction = Math.max(totalRestantFamille - reduction, 0);
           return `
           <div style="margin-top:12px; padding-top:12px; border-top:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
