@@ -941,7 +941,7 @@ function renderPayments(){
               <td class="mono">${formatMontant(totalDu)}</td>
               <td class="mono" style="color:var(--pine);">${formatMontant(verse)}</td>
               <td class="mono" style="color:${restant>0?'var(--bordeaux)':'var(--ink-soft)'};">${formatMontant(Math.max(restant,0))}${abandon?' <span style="font-size:11px;">(non comptabilisé)</span>':''}</td>
-              <td class="mono" style="color:${pct>0?'var(--bordeaux)':'var(--pine)'};">${totalDu>0?pct+'%':'—'}</td>
+              <td class="mono" style="color:${pct>0?'var(--bordeaux)':'var(--pine)'};">${(totalDu>0 && !abandon)?pct+'%':'—'}</td>
               <td>${statut}</td>
             </tr>`;
           }).join('')}
