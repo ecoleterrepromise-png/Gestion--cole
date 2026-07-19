@@ -927,7 +927,7 @@ function renderPayments(){
           ${studentsForSolde.map(s=>{
             const {frais, arriereRestant, totalDu, verse, restant} = soldeEleve(s);
             const abandon = isAbandon(s.id);
-            const pct = totalDu>0 ? Math.round(Math.max(restant,0)/totalDu*1000)/10 : 0;
+            const pct = totalDu>0 ? Math.round(restantApresReduction(s)/totalDu*1000)/10 : 0;
             const statut = abandon
               ? '<span class="stamp-badge" style="color:#3D3D3D; border-color:#3D3D3D; background:#EAEAEA;">ABANDON</span>'
               : (totalDu===0
@@ -2038,6 +2038,23 @@ function isAbandon(studentId){
 /* Total de toutes les réductions accordées par famille (chaque réduction n'est comptée qu'une seule fois, pas par enfant) */
 function totalReductionsFamilles(){
   return Object.values(state.reductionsFamille||{}).reduce((sum,montant)=>sum+Number(montant||0), 0);
+}
+/* Clé de famille d'un élève (même logique que pour le regroupement Parents & enfants) */
+function familyKeyOf(s){
+  return `${(s.pereNom||'').trim().toLowerCase()}|${(s.mereNom||'').trim().toLowerCase()}`;
+}
+/* Restant dû d'un élève après répartition proportionnelle de la réduction accordée à sa famille (si sa famille en a une) */
+function restantApresReduction(s){
+  const { restant } = soldeEleve(s);
+  const restantPos = Math.max(restant, 0);
+  const key = familyKeyOf(s);
+  const reduction = (state.reductionsFamille||{})[key] || 0;
+  if(reduction<=0) return restantPos;
+  const fratrie = state.students.filter(x=> familyKeyOf(x)===key && !isAbandon(x.id));
+  const totalRestantFamille = fratrie.reduce((sum,x)=> sum + Math.max(soldeEleve(x).restant,0), 0);
+  if(totalRestantFamille<=0) return 0;
+  const partReduction = (restantPos/totalRestantFamille) * Math.min(reduction, totalRestantFamille);
+  return Math.max(restantPos - partReduction, 0);
 }
 function soldeEleve(s){
   const fraisBase = (state.fraisScolarite||{})[s.classe] || 0;
@@ -3792,11 +3809,12 @@ function calculPourcentagesParClasse(){
   const actifs = state.students.filter(s=>!isAbandon(s.id));
   const parClasse = {};
   actifs.forEach(s=>{
-    const { totalDu, restant } = soldeEleve(s);
+    const { totalDu } = soldeEleve(s);
+    const restant = restantApresReduction(s);
     const cls = s.classe || '— Sans classe —';
     if(!parClasse[cls]) parClasse[cls] = { totalDu:0, restant:0 };
     parClasse[cls].totalDu += totalDu;
-    parClasse[cls].restant += Math.max(restant,0);
+    parClasse[cls].restant += restant;
   });
   const lignes = Object.keys(parClasse).sort().map(cls=>{
     const d = parClasse[cls];
@@ -3839,32 +3857,38 @@ function exportPourcentageRestantsPDF(){
   try{
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
-    const startY = pdfHeader(doc, "Pourcentage des restants dûs");
+    let y = pdfHeader(doc, "Pourcentage des restants dûs");
 
-    // Tableau par élève
-    doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
-    doc.text('Par élève', 14, startY);
-    doc.setFont(undefined, 'normal');
-    doc.autoTable({
-      startY: startY + 4,
-      head: [['Élève','Classe','Total dû','Restant dû','% restant']],
-      body: actifs.map(s=>{
-        const { totalDu, restant } = soldeEleve(s);
-        const pct = totalDu>0 ? Math.round(Math.max(restant,0)/totalDu*1000)/10 : 0;
-        return [`${s.prenom} ${s.nom}`, s.classe||'—', formatMontant(totalDu), formatMontant(Math.max(restant,0)), totalDu>0?pct+'%':'—'];
-      }),
-      styles:{fontSize:8},
-      headStyles:{fillColor:[27,42,74]},
+    // Un tableau distinct par classe
+    const parClasse = {};
+    actifs.forEach(s=>{ const c = s.classe || '— Sans classe —'; (parClasse[c] = parClasse[c]||[]).push(s); });
+    Object.keys(parClasse).sort().forEach(cls=>{
+      if(y > 265){ doc.addPage(); y = 20; }
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'bold');
+      doc.text(cls, 14, y);
+      doc.setFont(undefined, 'normal');
+      doc.autoTable({
+        startY: y + 4,
+        head: [['Élève','Total dû','Restant dû','% restant']],
+        body: parClasse[cls].map(s=>{
+          const { totalDu } = soldeEleve(s);
+          const restant = restantApresReduction(s);
+          const pct = totalDu>0 ? Math.round(restant/totalDu*1000)/10 : 0;
+          return [`${s.prenom} ${s.nom}`, formatMontant(totalDu), formatMontant(restant), totalDu>0?pct+'%':'—'];
+        }),
+        styles:{fontSize:8},
+        headStyles:{fillColor:[27,42,74]},
+      });
+      y = doc.lastAutoTable.finalY + 10;
     });
 
-    // Tableau par classe + école
+    // Récapitulatif par classe + école
     const { lignes, totalEcoleDu, totalEcoleRestant, pctEcole } = calculPourcentagesParClasse();
-    let y = doc.lastAutoTable.finalY + 12;
     if(y > 250){ doc.addPage(); y = 20; }
-    doc.setFontSize(11);
+    doc.setFontSize(12);
     doc.setFont(undefined, 'bold');
-    doc.text('Par classe et pour toute l\'école', 14, y);
+    doc.text('Récapitulatif par classe et pour toute l\'école', 14, y);
     doc.setFont(undefined, 'normal');
     doc.autoTable({
       startY: y + 4,
