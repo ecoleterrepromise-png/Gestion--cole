@@ -403,7 +403,7 @@
 /* ============ STATE ============ */
 const JOURS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
 let state = { students:[], payments:[], schedule:[], attendance:[], messages:[], finances:[], grades:[], fraisScolarite:{}, staff:[], staffPayments:[], parentRegistry:{}, parentSeqCounter:0,
-  plagesHoraires: ["08:00-10:00","10:00-12:00","14:00-16:00","16:00-18:00"], documents:[], documentLoans:[], reductionsFamille:{}, planningActivites:[],
+  plagesHoraires: ["08:00-10:00","10:00-12:00","14:00-16:00","16:00-18:00"], documents:[], documentLoans:[], reductionsFamille:{}, planningActivites:[], financesArchive:{},
   schoolInfo: { nom:"COMPLEXE SCOLAIRE TERRE PROMISE", telephone:"0197102175 / 01682090", anneeScolaire:"2025-2026", directeur:"", logo:null, signature:null, cachet:null, primeSeuil:10, primeMontant:0, fraisInscriptionPrimaire:0, fraisInscriptionCollege:0 } };
 let currentTab = 'dashboard';
 let attDate = new Date().toISOString().slice(0,10);
@@ -438,6 +438,7 @@ async function loadState(){
         plagesHoraires: parsed.plagesHoraires||["08:00-10:00","10:00-12:00","14:00-16:00","16:00-18:00"],
         documents: parsed.documents||[],
         planningActivites: parsed.planningActivites||[],
+        financesArchive: parsed.financesArchive||{},
         documentLoans: parsed.documentLoans||[],
         reductionsFamille: parsed.reductionsFamille||{},
         parentSeqCounter: parsed.parentSeqCounter||0,
@@ -2989,6 +2990,10 @@ function renderPromotion(){
         <input type="checkbox" id="promoPresences" checked style="width:16px; height:16px; margin-top:2px;">
         <span>Réinitialiser le registre des présences</span>
       </label>
+      <label style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; font-size:14px; line-height:1.4;">
+        <input type="checkbox" id="promoFinances" checked style="width:16px; height:16px; margin-top:2px;">
+        <span>Réinitialiser la « Situation financière » du tableau de bord (recettes/dépenses) pour repartir de zéro cette année — l'historique de l'année précédente est archivé, rien n'est supprimé. Les arriérés des élèves ne sont pas concernés.</span>
+      </label>
     </div>
     <div class="section-block">
       <h3>3. Nouvelle classe par élève</h3>
@@ -3057,6 +3062,8 @@ async function applyPromotion(){
   const reporter = document.getElementById('promoReporter').checked;
   const resetNotes = document.getElementById('promoNotes').checked;
   const resetPresences = document.getElementById('promoPresences').checked;
+  const resetFinances = document.getElementById('promoFinances').checked;
+  const ancienneAnnee = state.schoolInfo.anneeScolaire || 'année précédente';
 
   // 1. Report du solde en arriéré (calculé AVANT changement de classe, car il dépend des frais de la classe actuelle)
   if(reporter){
@@ -3101,6 +3108,11 @@ async function applyPromotion(){
   // 5. Réinitialisations optionnelles
   if(resetNotes) state.grades = [];
   if(resetPresences) state.attendance = [];
+  if(resetFinances){
+    if(!state.financesArchive) state.financesArchive = {};
+    state.financesArchive[ancienneAnnee] = state.finances;
+    state.finances = [];
+  }
 
   await saveState();
   alert("Passage à la nouvelle année scolaire effectué avec succès !");
