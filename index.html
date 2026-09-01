@@ -403,7 +403,7 @@
 /* ============ STATE ============ */
 const JOURS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
 let state = { students:[], payments:[], schedule:[], attendance:[], messages:[], finances:[], grades:[], fraisScolarite:{}, staff:[], staffPayments:[], parentRegistry:{}, parentSeqCounter:0,
-  plagesHoraires: ["08:00-10:00","10:00-12:00","14:00-16:00","16:00-18:00"], documents:[], documentLoans:[], reductionsFamille:{}, planningActivites:[], financesArchive:{},
+  plagesHoraires: ["08:00-10:00","10:00-12:00","14:00-16:00","16:00-18:00"], documents:[], documentLoans:[], reductionsFamille:{}, planningActivites:[], financesArchive:{}, budgetLignes:[], budgetArchive:{},
   schoolInfo: { nom:"COMPLEXE SCOLAIRE TERRE PROMISE", telephone:"0197102175 / 01682090", anneeScolaire:"2025-2026", directeur:"", logo:null, signature:null, cachet:null, primeSeuil:10, primeMontant:0, fraisInscriptionPrimaire:0, fraisInscriptionCollege:0 } };
 let currentTab = 'dashboard';
 let attDate = new Date().toISOString().slice(0,10);
@@ -439,6 +439,8 @@ async function loadState(){
         documents: parsed.documents||[],
         planningActivites: parsed.planningActivites||[],
         financesArchive: parsed.financesArchive||{},
+        budgetLignes: parsed.budgetLignes||[],
+        budgetArchive: parsed.budgetArchive||{},
         documentLoans: parsed.documentLoans||[],
         reductionsFamille: parsed.reductionsFamille||{},
         parentSeqCounter: parsed.parentSeqCounter||0,
@@ -481,6 +483,7 @@ function buildShell(){
     {id:'personnel', label:"Personnel", num:'09', color:'#8A5A1F'},
     {id:'documents', label:"Documents & Outils", num:'10', color:'#5A6472'},
     {id:'planning', label:"Planning", num:'11', color:'#7A5C3E'},
+    {id:'budget', label:"Budget", num:'12', color:'#1F7A6C'},
     {id:'settings', label:"Réglages", num:'⚙', color:'#4A5568'},
   ];
   document.getElementById('app').innerHTML = `
@@ -516,6 +519,7 @@ function render(){
   else if(currentTab==='personnel') main.innerHTML = renderPersonnel();
   else if(currentTab==='documents') main.innerHTML = renderDocuments();
   else if(currentTab==='planning') main.innerHTML = renderPlanning();
+  else if(currentTab==='budget') main.innerHTML = renderBudget();
   else if(currentTab==='promotion') main.innerHTML = renderPromotion();
   attachHandlers();
 }
@@ -908,6 +912,34 @@ function renderPayments(){
       <button class="btn btn-primary" onclick="openPaymentForm()" ${state.students.length===0?'disabled title="Ajoutez d\'abord un élève"':''}>+ Nouveau paiement</button>
     </div>
     <div class="section-block">
+      <h3>Journal des paiements</h3>
+      ${state.payments.length===0 ? '<div class="empty">Aucun paiement enregistré.</div>' : `
+      <table>
+        <thead><tr><th>Élève</th><th>Motif</th><th>Montant</th><th>Échéance</th><th>Statut</th><th></th></tr></thead>
+        <tbody>
+          ${state.payments.map((p,idx)=>({p,idx})).sort((a,b)=>{
+            const da = a.p.datePaiement || a.p.echeance || '';
+            const db = b.p.datePaiement || b.p.echeance || '';
+            if(da!==db) return da<db ? 1 : -1;
+            return b.idx - a.idx; // à date égale, le plus récemment ajouté (donc le dernier reçu) en premier
+          }).map(({p})=>`
+            <tr>
+              <td>${studentName(p.studentId)}</td>
+              <td>${escapeHtml(p.motif)}</td>
+              <td class="mono">${formatMontant(p.montant)}</td>
+              <td class="mono">${formatDateFR(p.echeance)}</td>
+              <td>${statutBadge(p.statut)}</td>
+              <td class="row-actions">
+                <button class="btn btn-outline btn-sm" onclick="openPaymentForm('${p.id}')">Modifier</button>
+                ${p.statut==='paye' ? `<button class="btn btn-outline btn-sm" onclick="downloadRecuJPEG('${p.id}')">🧾 Reçu</button><button class="btn btn-outline btn-sm" onclick="envoyerRecuWhatsApp('${p.id}')">📲 WhatsApp</button>` : ''}
+                <button class="btn btn-danger btn-sm" onclick="deletePayment('${p.id}')">${p.statut==='paye'?'🗑 Supprimer le reçu':'Suppr.'}</button>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>`}
+    </div>
+    <div class="section-block">
       <h3>Soldes de scolarité par élève</h3>
       <div class="toolbar" style="margin-bottom:12px;">
         <div class="filters">
@@ -957,34 +989,6 @@ function renderPayments(){
     <div class="section-block">
       <h3>Pourcentage des restants dûs — par classe et pour toute l'école</h3>
       ${renderPourcentageRestantsTable()}
-    </div>
-    <div class="section-block">
-      <h3>Journal des paiements</h3>
-      ${state.payments.length===0 ? '<div class="empty">Aucun paiement enregistré.</div>' : `
-      <table>
-        <thead><tr><th>Élève</th><th>Motif</th><th>Montant</th><th>Échéance</th><th>Statut</th><th></th></tr></thead>
-        <tbody>
-          ${state.payments.map((p,idx)=>({p,idx})).sort((a,b)=>{
-            const da = a.p.datePaiement || a.p.echeance || '';
-            const db = b.p.datePaiement || b.p.echeance || '';
-            if(da!==db) return da<db ? 1 : -1;
-            return b.idx - a.idx; // à date égale, le plus récemment ajouté (donc le dernier reçu) en premier
-          }).map(({p})=>`
-            <tr>
-              <td>${studentName(p.studentId)}</td>
-              <td>${escapeHtml(p.motif)}</td>
-              <td class="mono">${formatMontant(p.montant)}</td>
-              <td class="mono">${formatDateFR(p.echeance)}</td>
-              <td>${statutBadge(p.statut)}</td>
-              <td class="row-actions">
-                <button class="btn btn-outline btn-sm" onclick="openPaymentForm('${p.id}')">Modifier</button>
-                ${p.statut==='paye' ? `<button class="btn btn-outline btn-sm" onclick="downloadRecuJPEG('${p.id}')">🧾 Reçu</button><button class="btn btn-outline btn-sm" onclick="envoyerRecuWhatsApp('${p.id}')">📲 WhatsApp</button>` : ''}
-                <button class="btn btn-danger btn-sm" onclick="deletePayment('${p.id}')">${p.statut==='paye'?'🗑 Supprimer le reçu':'Suppr.'}</button>
-              </td>
-            </tr>
-          `).join('')}
-        </tbody>
-      </table>`}
     </div>
   `;
 }
@@ -1264,7 +1268,7 @@ async function deleteMessage(id){
 
 /* ============ FINANCES (RECETTES / DÉPENSES) ============ */
 const CATEGORIES_RECETTE = ["Frais de scolarité","Subvention","Don","Vente / activité","Autre recette"];
-const CATEGORIES_DEPENSE = ["Salaires","Fournitures scolaires","Entretien / réparations","Électricité / eau","Transport","Alimentation / cantine","Autre dépense"];
+const CATEGORIES_DEPENSE = ["Salaires","Fournitures scolaires","Entretien / réparations","Électricité / eau","Transport","Alimentation / cantine","Budget","Autre dépense"];
 
 function financesFiltered(){
   const mode = document.getElementById('finPeriodMode')?.value || 'tout';
@@ -2186,6 +2190,8 @@ function renderPersonnel(){
               <td class="mono">${escapeHtml(st.telephone)||'—'}</td>
               <td class="row-actions">
                 <button class="btn btn-outline btn-sm" onclick="openStaffForm('${st.id}')">Modifier</button>
+                <button class="btn btn-outline btn-sm" onclick="downloadCertificatTravail('${st.id}')">📄 Certificat</button>
+                <button class="btn btn-outline btn-sm" onclick="envoyerCertificatTravailWhatsApp('${st.id}')">📲 WhatsApp</button>
                 <button class="btn btn-danger btn-sm" onclick="deleteStaff('${st.id}')">Suppr.</button>
               </td>
             </tr>
@@ -2925,6 +2931,61 @@ async function envoyerRapportFamilleWhatsApp(key){
 }
 
 /* ============ CERTIFICAT DE SCOLARITÉ ============ */
+function buildCertificatTravailDoc(st){
+  const info = state.schoolInfo;
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const startY = pdfHeader(doc, "CERTIFICAT DE TRAVAIL");
+
+  const genreDirecteur = info.directeur && /^Mme|^Madame/i.test(info.directeur) ? 'e' : '';
+  const texte = `Je soussigné${genreDirecteur}, ${info.directeur || '(nom du directeur non renseigné)'}, Directeur${genreDirecteur?'trice':''} de ${info.nom}, certifie que :\n\n${st.prenom} ${st.nom}${st.diplome?`, titulaire de ${st.diplome}`:''}, exerce actuellement au sein de notre établissement en qualité de ${st.poste || '(fonction non renseignée)'}.\n\nCe certificat est délivré à l'intéressé${st.sexe==='F'?'e':'(e)'} pour servir et valoir ce que de droit.`;
+
+  doc.setFontSize(11);
+  doc.setFont(undefined, 'normal');
+  const lines = doc.splitTextToSize(texte, 175);
+  doc.text(lines, 18, startY + 15);
+
+  const afterTextY = startY + 15 + lines.length*6.2;
+  doc.setFontSize(10);
+  doc.text(`Délivré le ${new Date().toLocaleDateString('fr-FR')}`, 18, afterTextY + 10);
+
+  pdfSignature(doc, afterTextY + 30);
+  return doc;
+}
+function downloadCertificatTravail(staffId){
+  const st = state.staff.find(x=>x.id===staffId);
+  if(!st){ alert("Employé introuvable."); return; }
+  try{
+    const doc = buildCertificatTravailDoc(st);
+    doc.save(`certificat-travail-${(st.nom||'employe').replace(/\s+/g,'_')}-${todayStr()}.pdf`);
+  }catch(e){ alert("Export impossible : connecte-toi une fois à Internet pour charger l'outil d'export, puis réessaie."); }
+}
+async function envoyerCertificatTravailWhatsApp(staffId){
+  const st = state.staff.find(x=>x.id===staffId);
+  if(!st){ alert("Employé introuvable."); return; }
+  try{
+    const doc = buildCertificatTravailDoc(st);
+    const blob = doc.output('blob');
+    const fileName = `certificat-travail-${(st.nom||'employe').replace(/\s+/g,'_')}-${todayStr()}.pdf`;
+    const file = new File([blob], fileName, {type:'application/pdf'});
+    const texte = `Certificat de travail — ${state.schoolInfo.nom}\nÀ l'attention de : ${st.prenom} ${st.nom}`;
+
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({ files:[file], title:'Certificat de travail', text: texte }); return; }
+      catch(e){ if(e && e.name==='AbortError') return; }
+    }
+    const link = document.createElement('a');
+    link.download = fileName;
+    link.href = URL.createObjectURL(blob);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    const numero = formatWhatsAppNumber(st.telephone);
+    const waUrl = numero ? `https://wa.me/${numero}?text=${encodeURIComponent(texte)}` : `https://wa.me/?text=${encodeURIComponent(texte)}`;
+    alert("Ton navigateur ne permet pas d'envoyer le PDF directement dans WhatsApp. Le certificat a été téléchargé : ouvre WhatsApp puis joins-le manuellement à la conversation qui va s'ouvrir.");
+    window.open(waUrl, '_blank');
+  }catch(e){ alert("Export impossible : connecte-toi une fois à Internet pour charger l'outil d'export, puis réessaie."); }
+}
 function downloadCertificatScolarite(studentId){
   const s = state.students.find(x=>x.id===studentId);
   if(!s){ alert("Élève introuvable."); return; }
@@ -2993,6 +3054,10 @@ function renderPromotion(){
       <label style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; font-size:14px; line-height:1.4;">
         <input type="checkbox" id="promoFinances" checked style="width:16px; height:16px; margin-top:2px;">
         <span>Réinitialiser la « Situation financière » du tableau de bord (recettes/dépenses) pour repartir de zéro cette année — l'historique de l'année précédente est archivé, rien n'est supprimé. Les arriérés des élèves ne sont pas concernés.</span>
+      </label>
+      <label style="display:flex; align-items:flex-start; gap:8px; margin-top:12px; font-size:14px; line-height:1.4;">
+        <input type="checkbox" id="promoBudget" checked style="width:16px; height:16px; margin-top:2px;">
+        <span>Archiver les lignes de budget <strong>réalisées</strong> et reconduire automatiquement les éléments <strong>non réalisés</strong> dans la nouvelle année</span>
       </label>
     </div>
     <div class="section-block">
@@ -3063,6 +3128,7 @@ async function applyPromotion(){
   const resetNotes = document.getElementById('promoNotes').checked;
   const resetPresences = document.getElementById('promoPresences').checked;
   const resetFinances = document.getElementById('promoFinances').checked;
+  const resetBudget = document.getElementById('promoBudget').checked;
   const ancienneAnnee = state.schoolInfo.anneeScolaire || 'année précédente';
 
   // 1. Report du solde en arriéré (calculé AVANT changement de classe, car il dépend des frais de la classe actuelle)
@@ -3112,6 +3178,20 @@ async function applyPromotion(){
     if(!state.financesArchive) state.financesArchive = {};
     state.financesArchive[ancienneAnnee] = state.finances;
     state.finances = [];
+  }
+  if(resetBudget){
+    if(!state.budgetArchive) state.budgetArchive = {};
+    const lignesRealisees = [];
+    const lignesReconduites = [];
+    state.budgetLignes.forEach(ligne=>{
+      const items = ligne.items||[];
+      const realises = items.filter(it=> it.totalReel!==null && it.totalReel!==undefined);
+      const nonRealises = items.filter(it=> it.totalReel===null || it.totalReel===undefined);
+      if(realises.length>0) lignesRealisees.push({ id: ligne.id, titre: ligne.titre, items: realises });
+      if(nonRealises.length>0) lignesReconduites.push({ id: uid(), titre: ligne.titre, items: nonRealises.map(it=>({ id: uid(), nom: it.nom, quantite: it.quantite, prixUnitaire: it.prixUnitaire, totalReel: null, financeId: null })) });
+    });
+    state.budgetArchive[ancienneAnnee] = lignesRealisees;
+    state.budgetLignes = lignesReconduites;
   }
 
   await saveState();
@@ -3344,11 +3424,14 @@ function buildMessagePDFDoc(m){
   doc.setLineWidth(0.4);
   doc.line(14, startY+24, 196, startY+24);
 
-  doc.setFontSize(11);
+  doc.setFontSize(16);
+  doc.setLineHeightFactor(1.5);
   const lines = doc.splitTextToSize(m.message||'', 175);
   doc.text(lines, 14, startY + 34);
 
-  const afterTextY = startY + 34 + lines.length*6.2;
+  const ligneHauteurMM = 16 * 0.3528 * 1.5; // taille (pt→mm) × interligne 1,5
+  const afterTextY = startY + 34 + lines.length*ligneHauteurMM;
+  doc.setLineHeightFactor(1.15); // remet l'interligne par défaut pour la suite du document
   pdfSignature(doc, afterTextY + 20);
   return doc;
 }
@@ -3451,7 +3534,7 @@ function renderDocuments(){
     ${(()=>{
       const sansClasse = state.documents.filter(d=>!d.classe);
       if(sansClasse.length===0) return '';
-      return `<div class="section-block"><h3>Général (sans classe précise)</h3>${sansClasse.map(d=>documentRowHtml(d)).join('')}</div>`;
+      return `<div class="section-block"><h3>Toute l'école</h3>${sansClasse.map(d=>documentRowHtml(d)).join('')}</div>`;
     })()}
   `;
 }
@@ -3505,7 +3588,7 @@ function openDocumentForm(){
 }
 async function saveDocument(){
   const nom = document.getElementById('f_docNom').value.trim();
-  const classe = document.getElementById('f_docClasse').value.trim();
+  const classe = document.getElementById('f_docClasse').value.trim() || "Toute l'école";
   const prix = parseFloat(document.getElementById('f_docPrix').value)||0;
   if(!nom){ alert("Indique un nom pour ce document ou outil."); return; }
   state.documents.push({ id: uid(), nom, classe, prix });
@@ -3919,21 +4002,22 @@ function exportPourcentageRestantsPDF(){
 
 /* ============ PLANNING PAR NIVEAU (mois en colonnes, activités en lignes) ============ */
 const MOIS_PLANNING = ["Septembre","Octobre","Novembre","Décembre","Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août"];
+const COULEURS_SEMAINES = ["#FCE8D5","#D9EDE3","#DCE6F5","#F3E0EC","#F0EAD6"];
 function renderPlanning(){
   const niveau = document.getElementById('planningNiveauFilter')?.value || 'Primaire';
   const activites = state.planningActivites.filter(a=>a.niveau===niveau);
-  // Regroupe les activités par jour du mois (1-31) et par colonne de mois (0=Septembre ... 11=Août)
+  // Regroupe les activités par mois (0=Septembre ... 11=Août) et par semaine du mois (1 à 5)
   const grille = {};
   activites.forEach(a=>{
     if(!a.date) return;
-    const jour = parseInt(a.date.split('-')[2], 10);
     const moisIndex = planningMoisIndex(a.date);
-    if(!jour || moisIndex<0) return;
-    const cle = `${jour}-${moisIndex}`;
+    const semaine = planningSemaineIndex(a.date);
+    if(moisIndex<0 || !semaine) return;
+    const cle = `${moisIndex}-${semaine}`;
     if(!grille[cle]) grille[cle] = [];
     grille[cle].push(a);
   });
-  const joursSansDate = activites.filter(a=>!a.date);
+  const activitesSansDate = activites.filter(a=>!a.date);
   return `
     <div class="page-head">
       <div><h2>Planning</h2><p>Activités de l'année, organisées par niveau — ${state.schoolInfo.anneeScolaire||''}</p></div>
@@ -3950,21 +4034,20 @@ function renderPlanning(){
         </select>
       </div>
     </div>
-    ${joursSansDate.length>0 ? `<div class="section-block"><p style="font-size:12.5px; color:var(--ink-soft); margin:0;">⚠ ${joursSansDate.length} activité(s) sans date renseignée, non affichée(s) dans la grille : ${joursSansDate.map(a=>escapeHtml(a.nom)).join(', ')}</p></div>` : ''}
+    ${activitesSansDate.length>0 ? `<div class="section-block"><p style="font-size:12.5px; color:var(--ink-soft); margin:0;">⚠ ${activitesSansDate.length} activité(s) sans date renseignée, non affichée(s) dans la grille : ${activitesSansDate.map(a=>escapeHtml(a.nom)).join(', ')}</p></div>` : ''}
     <div class="section-block" style="overflow-x:auto;">
       ${activites.length===0 ? '<div class="empty">Aucune activité planifiée pour ce niveau. Ajoutes-en une avec le bouton ci-dessus.</div>' : `
       <table>
-        <thead><tr><th>Jour</th>${MOIS_PLANNING.map(m=>`<th>${m.slice(0,3)}</th>`).join('')}</tr></thead>
+        <thead><tr><th>Mois</th>${[1,2,3,4,5].map(sem=>`<th style="background:${COULEURS_SEMAINES[sem-1]};">Semaine ${sem}</th>`).join('')}</tr></thead>
         <tbody>
-          ${Array.from({length:31}, (_,i)=>i+1).map(jour=>`
+          ${MOIS_PLANNING.map((mois,moisIndex)=>`
             <tr style="border-bottom:1.5px solid var(--line);">
-              <td class="mono" style="font-weight:600;">${jour}</td>
-              ${MOIS_PLANNING.map((m,moisIndex)=>{
-                const acts = grille[`${jour}-${moisIndex}`] || [];
-                if(acts.length===0) return `<td></td>`;
-                return `<td style="font-size:11.5px; padding:6px 8px;">${acts.map(a=>`
-                  <div style="margin-bottom:3px; padding:2px 5px; background:var(--paper-panel); border-left:2px solid var(--brass); border-radius:2px;">
-                    ${escapeHtml(a.nom)}
+              <td style="font-weight:600;">${mois}</td>
+              ${[1,2,3,4,5].map(sem=>{
+                const acts = grille[`${moisIndex}-${sem}`] || [];
+                return `<td style="font-size:11.5px; padding:6px 8px; background:${COULEURS_SEMAINES[sem-1]}33; vertical-align:top;">${acts.map(a=>`
+                  <div style="margin-bottom:3px; padding:2px 5px; background:#fff; border-left:2px solid var(--brass); border-radius:2px;">
+                    ${escapeHtml(a.nom)} <span class="mono" style="font-size:10px; color:var(--ink-soft);">(${formatDateFR(a.date)})</span>
                     <span class="row-actions" style="display:inline-flex; gap:4px; margin-left:4px;">
                       <a href="#" onclick="openPlanningActiviteForm('${a.id}'); return false;" style="font-size:10px;">✏️</a>
                       <a href="#" onclick="deletePlanningActivite('${a.id}'); return false;" style="font-size:10px; color:var(--bordeaux);">✕</a>
@@ -3985,6 +4068,13 @@ function planningMoisIndex(iso){
   if(!m) return -1;
   // Réordonne pour une année scolaire commençant en septembre (index 0) et finissant en août (index 11)
   return m>=9 ? m-9 : m+3;
+}
+/* Renvoie le numéro de semaine du mois (1 à 5) d'une date AAAA-MM-JJ */
+function planningSemaineIndex(iso){
+  if(!iso) return 0;
+  const jour = parseInt(iso.split('-')[2], 10);
+  if(!jour) return 0;
+  return Math.min(Math.ceil(jour/7), 5);
 }
 function openPlanningActiviteForm(id){
   const a = id ? state.planningActivites.find(x=>x.id===id) : null;
@@ -4036,30 +4126,252 @@ function exportPlanningPDF(){
     const grille = {};
     activites.forEach(a=>{
       if(!a.date) return;
-      const jour = parseInt(a.date.split('-')[2], 10);
       const moisIndex = planningMoisIndex(a.date);
-      if(!jour || moisIndex<0) return;
-      const cle = `${jour}-${moisIndex}`;
+      const semaine = planningSemaineIndex(a.date);
+      if(moisIndex<0 || !semaine) return;
+      const cle = `${moisIndex}-${semaine}`;
       if(!grille[cle]) grille[cle] = [];
-      grille[cle].push(a.nom);
+      grille[cle].push(`${a.nom} (${formatDateFR(a.date)})`);
     });
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation:'landscape' });
     const startY = pdfHeader(doc, `Planning annuel — ${niveau}`);
-    const head = [['Jour', ...MOIS_PLANNING.map(m=>m.slice(0,3))]];
-    const body = Array.from({length:31}, (_,i)=>i+1).map(jour=>{
-      const cells = MOIS_PLANNING.map((m,moisIndex)=> (grille[`${jour}-${moisIndex}`]||[]).join(' / '));
-      return [String(jour), ...cells];
+    const head = [['Mois','Semaine 1','Semaine 2','Semaine 3','Semaine 4','Semaine 5']];
+    const body = MOIS_PLANNING.map((mois,moisIndex)=>{
+      const cells = [1,2,3,4,5].map(sem => (grille[`${moisIndex}-${sem}`]||[]).join('\n'));
+      return [mois, ...cells];
     });
+    const couleursRGB = [[252,232,213],[217,237,227],[220,230,245],[243,224,236],[240,234,214]];
     doc.autoTable({
       startY,
       head, body,
-      styles:{fontSize:7, halign:'center', cellPadding:1.5},
-      columnStyles:{0:{halign:'center', fontStyle:'bold', cellWidth:12}},
+      styles:{fontSize:8, cellPadding:2, valign:'top'},
+      columnStyles:{
+        0:{fontStyle:'bold', cellWidth:26},
+        1:{fillColor:couleursRGB[0]},
+        2:{fillColor:couleursRGB[1]},
+        3:{fillColor:couleursRGB[2]},
+        4:{fillColor:couleursRGB[3]},
+        5:{fillColor:couleursRGB[4]},
+      },
       headStyles:{fillColor:[27,42,74]},
     });
     pdfSignature(doc, doc.lastAutoTable.finalY + 20);
     doc.save(`planning-${niveau.toLowerCase()}-${todayStr()}.pdf`);
+  }catch(e){ alert("Export impossible : connecte-toi une fois à Internet pour charger l'outil d'export, puis réessaie."); }
+}
+
+/* ============ BUDGET (lignes, éléments, prévisionnel vs réalisé) ============ */
+function renderBudget(){
+  let totalGeneralEstimatif = 0, totalGeneralReel = 0;
+  state.budgetLignes.forEach(ligne=>{
+    (ligne.items||[]).forEach(it=>{
+      totalGeneralEstimatif += (Number(it.quantite)||0)*(Number(it.prixUnitaire)||0);
+      if(it.totalReel!==null && it.totalReel!==undefined) totalGeneralReel += Number(it.totalReel);
+    });
+  });
+  return `
+    <div class="page-head">
+      <div><h2>Budget</h2><p>Lignes budgétaires prévisionnelles et réalisées — ${state.schoolInfo.anneeScolaire||''}</p></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="openLigneBudgetForm()">+ Ajouter une ligne</button>
+        <button class="btn btn-outline btn-sm" onclick="exportBudgetPDF()">📄 Télécharger le budget (PDF)</button>
+      </div>
+    </div>
+    ${state.budgetLignes.length===0 ? '<div class="section-block"><div class="empty">Aucune ligne budgétaire. Ajoutes-en une avec le bouton ci-dessus.</div></div>' : state.budgetLignes.map(ligne=>renderLigneBudgetHtml(ligne)).join('')}
+    ${state.budgetLignes.length>0 ? `
+    <div class="section-block" style="border:2px solid var(--ink);">
+      <h3 style="margin-top:0;">Coût total du budget</h3>
+      <div style="display:flex; gap:32px; flex-wrap:wrap;">
+        <div>Total estimatif : <span class="mono" style="font-size:20px; font-weight:700;">${formatMontant(totalGeneralEstimatif)}</span></div>
+        <div>Total réel dépensé : <span class="mono" style="font-size:20px; font-weight:700; color:var(--pine);">${formatMontant(totalGeneralReel)}</span></div>
+      </div>
+    </div>` : ''}
+  `;
+}
+function renderLigneBudgetHtml(ligne){
+  const items = ligne.items||[];
+  let totalEstimatif = 0, totalReel = 0;
+  items.forEach(it=>{
+    totalEstimatif += (Number(it.quantite)||0) * (Number(it.prixUnitaire)||0);
+    if(it.totalReel!==null && it.totalReel!==undefined && it.totalReel!=='') totalReel += Number(it.totalReel);
+  });
+  return `
+    <div class="section-block">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+        <h3 style="margin:0;">${escapeHtml(ligne.titre)}</h3>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-outline btn-sm" onclick="openBudgetItemForm('${ligne.id}')">+ Ajouter un élément</button>
+          <button class="btn btn-danger btn-sm" onclick="deleteLigneBudget('${ligne.id}')">Supprimer la ligne</button>
+        </div>
+      </div>
+      ${items.length===0 ? '<div class="empty">Aucun élément dans cette ligne pour le moment.</div>' : `
+      <div style="overflow-x:auto;">
+      <table>
+        <thead><tr><th>Élément</th><th>Quantité</th><th>Prix unitaire</th><th>Total estimatif</th><th>Date de réalisation</th><th>Total réel dépensé</th><th></th></tr></thead>
+        <tbody>
+          ${items.map(it=>{
+            const estim = (Number(it.quantite)||0)*(Number(it.prixUnitaire)||0);
+            return `<tr>
+              <td>${escapeHtml(it.nom)}</td>
+              <td><input type="number" step="1" value="${it.quantite}" style="width:64px; padding:5px;" onchange="updateBudgetItem('${ligne.id}','${it.id}','quantite',this.value)"></td>
+              <td><input type="number" step="1" value="${it.prixUnitaire}" style="width:100px; padding:5px;" onchange="updateBudgetItem('${ligne.id}','${it.id}','prixUnitaire',this.value)"></td>
+              <td class="mono">${formatMontant(estim)}</td>
+              <td><input type="date" value="${it.dateRealisation||''}" style="padding:5px;" onchange="updateBudgetItem('${ligne.id}','${it.id}','dateRealisation',this.value)"></td>
+              <td><input type="number" step="1" placeholder="Non réalisé" value="${(it.totalReel!==null&&it.totalReel!==undefined)?it.totalReel:''}" style="width:120px; padding:5px;" onchange="updateBudgetItem('${ligne.id}','${it.id}','totalReel',this.value)"></td>
+              <td><button class="btn btn-danger btn-sm" onclick="deleteBudgetItem('${ligne.id}','${it.id}')">✕</button></td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--ink);">
+            <td colspan="3" style="text-align:right;"><strong>Total de la ligne :</strong></td>
+            <td class="mono"><strong>${formatMontant(totalEstimatif)}</strong></td>
+            <td></td>
+            <td class="mono"><strong>${formatMontant(totalReel)}</strong></td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+      </div>`}
+    </div>
+  `;
+}
+function openLigneBudgetForm(){
+  openModal(`
+    <h3>Nouvelle ligne budgétaire</h3>
+    <div class="form-grid wide">
+      <div class="field"><label>Titre de la ligne</label><input id="f_ligneTitre" placeholder="ex: Fournitures scolaires, Événements…"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveLigneBudget()">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveLigneBudget(){
+  const titre = document.getElementById('f_ligneTitre').value.trim();
+  if(!titre){ alert("Indique un titre pour cette ligne."); return; }
+  state.budgetLignes.push({ id: uid(), titre, items: [] });
+  await saveState();
+  closeModal();
+  render();
+}
+async function deleteLigneBudget(ligneId){
+  if(!(await confirmModal("Supprimer cette ligne budgétaire et tous ses éléments ? Les dépenses déjà enregistrées dans Finances resteront (mais ne seront plus liées à cette ligne)."))) return;
+  state.budgetLignes = state.budgetLignes.filter(l=>l.id!==ligneId);
+  await saveState();
+  render();
+}
+function openBudgetItemForm(ligneId){
+  openModal(`
+    <h3>Nouvel élément</h3>
+    <div class="form-grid">
+      <div class="field" style="grid-column:1/-1;"><label>Nom de l'élément</label><input id="f_itemNom" placeholder="ex: Craies, Cahiers, Peinture…"></div>
+      <div class="field"><label>Quantité</label><input type="number" step="1" id="f_itemQuantite" value="1"></div>
+      <div class="field"><label>Prix unitaire (FCFA)</label><input type="number" step="1" id="f_itemPrix" value="0"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" onclick="saveBudgetItem('${ligneId}')">Enregistrer</button>
+    </div>
+  `);
+}
+async function saveBudgetItem(ligneId){
+  const nom = document.getElementById('f_itemNom').value.trim();
+  const quantite = parseFloat(document.getElementById('f_itemQuantite').value)||0;
+  const prixUnitaire = parseFloat(document.getElementById('f_itemPrix').value)||0;
+  if(!nom){ alert("Indique un nom pour cet élément."); return; }
+  const ligne = state.budgetLignes.find(l=>l.id===ligneId);
+  if(!ligne) return;
+  if(!ligne.items) ligne.items = [];
+  ligne.items.push({ id: uid(), nom, quantite, prixUnitaire, totalReel: null, financeId: null });
+  await saveState();
+  closeModal();
+  render();
+}
+async function updateBudgetItem(ligneId, itemId, champ, valeur){
+  const ligne = state.budgetLignes.find(l=>l.id===ligneId);
+  if(!ligne) return;
+  const item = (ligne.items||[]).find(i=>i.id===itemId);
+  if(!item) return;
+  if(champ==='quantite') item.quantite = parseFloat(valeur)||0;
+  else if(champ==='prixUnitaire') item.prixUnitaire = parseFloat(valeur)||0;
+  else if(champ==='dateRealisation') item.dateRealisation = valeur || null;
+  else if(champ==='totalReel'){
+    item.totalReel = valeur==='' ? null : (parseFloat(valeur)||0);
+    if(item.totalReel!==null && !item.dateRealisation) item.dateRealisation = todayStr();
+    if(item.totalReel===null) item.dateRealisation = null;
+    syncBudgetItemToFinances(item, ligne.titre);
+  }
+  await saveState();
+  render();
+}
+async function deleteBudgetItem(ligneId, itemId){
+  if(!(await confirmModal("Supprimer cet élément du budget ?"))) return;
+  const ligne = state.budgetLignes.find(l=>l.id===ligneId);
+  if(!ligne) return;
+  const item = (ligne.items||[]).find(i=>i.id===itemId);
+  if(item && item.financeId) state.finances = state.finances.filter(f=>f.id!==item.financeId);
+  ligne.items = (ligne.items||[]).filter(i=>i.id!==itemId);
+  await saveState();
+  render();
+}
+/* Fait entrer/sortir automatiquement le total réel dépensé dans les dépenses de Finances */
+function syncBudgetItemToFinances(item, ligneTitre){
+  if(item.totalReel!==null && item.totalReel!==undefined && item.totalReel>0){
+    let fin = item.financeId ? state.finances.find(f=>f.id===item.financeId) : null;
+    const desc = `Budget — ${ligneTitre} : ${item.nom}`;
+    if(fin){
+      fin.montant = item.totalReel;
+      fin.description = desc;
+    }else{
+      fin = { id: uid(), type:'depense', categorie:'Budget', montant: item.totalReel, date: todayStr(), description: desc, autoBudgetItemId: item.id };
+      state.finances.push(fin);
+      item.financeId = fin.id;
+    }
+  }else if(item.financeId){
+    state.finances = state.finances.filter(f=>f.id!==item.financeId);
+    item.financeId = null;
+  }
+}
+function exportBudgetPDF(){
+  if(state.budgetLignes.length===0){ alert("Aucune ligne budgétaire à exporter."); return; }
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    let y = pdfHeader(doc, "Budget — Provisoire & réalisé");
+    let totalGeneralEstim = 0, totalGeneralReel = 0;
+    state.budgetLignes.forEach(ligne=>{
+      if(y>250){ doc.addPage(); y=20; }
+      doc.setFontSize(11); doc.setFont(undefined,'bold');
+      doc.text(ligne.titre, 14, y);
+      doc.setFont(undefined,'normal');
+      let totalLigneEstim = 0, totalLigneReel = 0;
+      const body = (ligne.items||[]).map(it=>{
+        const estim = (Number(it.quantite)||0)*(Number(it.prixUnitaire)||0);
+        totalLigneEstim += estim;
+        const aReel = it.totalReel!==null && it.totalReel!==undefined;
+        if(aReel) totalLigneReel += Number(it.totalReel);
+        return [it.nom, String(it.quantite), formatMontant(it.prixUnitaire), formatMontant(estim), aReel?formatDateFR(it.dateRealisation):'—', aReel?formatMontant(it.totalReel):'Non réalisé'];
+      });
+      body.push([{content:'Total de la ligne', colSpan:3, styles:{fontStyle:'bold', halign:'right'}}, {content:formatMontant(totalLigneEstim), styles:{fontStyle:'bold'}}, '', {content:formatMontant(totalLigneReel), styles:{fontStyle:'bold'}}]);
+      totalGeneralEstim += totalLigneEstim; totalGeneralReel += totalLigneReel;
+      doc.autoTable({
+        startY: y+4,
+        head: [['Élément','Quantité','Prix unitaire','Total estimatif','Date de réalisation','Total réel dépensé']],
+        body,
+        styles:{fontSize:8},
+        headStyles:{fillColor:[27,42,74]},
+      });
+      y = doc.lastAutoTable.finalY + 10;
+    });
+    if(y>245){ doc.addPage(); y=20; }
+    doc.setFontSize(13); doc.setFont(undefined,'bold');
+    doc.text(`Total général estimatif : ${formatMontant(totalGeneralEstim)}`, 14, y);
+    doc.text(`Total général réel dépensé : ${formatMontant(totalGeneralReel)}`, 14, y+8);
+    pdfSignature(doc, y + 28);
+    doc.save(`budget-${todayStr()}.pdf`);
   }catch(e){ alert("Export impossible : connecte-toi une fois à Internet pour charger l'outil d'export, puis réessaie."); }
 }
 
