@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>CSTP INSCRIPTION</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1B2A4A; --ink-soft:#4A5568; --bordeaux:#8B2635; --pine:#2F6B4F; --brass:#A9781F;
+    --bleu-clair:#DCEBF7; --bleu-clair2:#EAF4FC;
+    --paper:#F7F4EC; --paper-panel:#EFEAD9; --line:#D9D2BE; --white:#FFFFFF;
+    --shadow:0 2px 10px rgba(27,42,74,0.08);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:640px; margin:0 auto; padding:0 0 60px;}
+
+  /* ===== PAGE D'ACCUEIL ===== */
+  #accueil{background:linear-gradient(180deg, var(--bleu-clair) 0%, var(--bleu-clair2) 100%); padding:32px 20px 44px; text-align:center;}
+  #accueil .logo{width:84px; height:84px; margin:0 auto 14px;}
+  #accueil .officiel p{margin:2px 0; font-size:12.5px; color:var(--ink-soft); font-weight:600; letter-spacing:.02em;}
+  #accueil .officiel .pays{font-size:13.5px; font-weight:700; color:var(--ink);}
+  #accueil h1{font-family:'Fraunces',serif; font-size:22px; margin:14px 0 2px; color:var(--ink);}
+  #accueil .tel{font-size:12.5px; color:var(--ink-soft); margin-bottom:20px;}
+  #accueil .illustration{max-width:280px; margin:0 auto 22px;}
+  #accueil .bienvenue{background:var(--white); border-radius:10px; padding:22px 20px; margin:0 auto; max-width:560px; box-shadow:var(--shadow); text-align:left;}
+  #accueil .bienvenue h2{font-family:'Fraunces',serif; font-size:19px; margin:0 0 10px; color:var(--ink);}
+  #accueil .bienvenue p{font-size:14.5px; line-height:1.6; color:var(--ink-soft); margin:0 0 10px;}
+  #accueil .btn-inscrire{margin-top:18px; width:100%; padding:15px; font-size:16px;}
+
+  /* ===== FORMULAIRE ===== */
+  .form-header{text-align:center; padding:22px 18px 10px;}
+  .form-header .stamp{display:inline-block; font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:.12em; color:var(--bordeaux); border:1px solid var(--bordeaux); padding:2px 8px; border-radius:2px; transform:rotate(-2deg); margin-bottom:10px;}
+  .form-header h1{font-family:'Fraunces',serif; font-size:22px; margin:0 0 6px;}
+  .form-header p{color:var(--ink-soft); font-size:13.5px; margin:0;}
+  .content{padding:0 18px;}
+  .card{background:var(--white); border:1px solid var(--line); border-radius:8px; padding:20px; margin-bottom:18px; box-shadow:var(--shadow);}
+  .card h2{font-family:'Fraunces',serif; font-size:17px; margin:0 0 14px; padding-bottom:10px; border-bottom:2px solid var(--ink);}
+  .card h3{font-size:12.5px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin:0 0 10px;}
+  .form-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+  .field{display:flex; flex-direction:column; gap:5px;}
+  .field.wide{grid-column:1/-1;}
+  label{font-size:12.5px; font-weight:600; color:var(--ink-soft);}
+  label .req{color:var(--bordeaux);}
+  input, select{padding:11px 12px; border:1.5px solid var(--line); border-radius:5px; font-family:'Inter',sans-serif; font-size:15px; background:var(--white); color:var(--ink);}
+  input:focus, select:focus{outline:none; border-color:var(--ink);}
+  input.champ-erreur{border-color:var(--bordeaux); background:#FBEAEA;}
+  .btn{border:none; border-radius:6px; padding:12px 18px; font-family:'Inter',sans-serif; font-weight:600; font-size:14.5px; cursor:pointer; transition:transform .1s ease;}
+  .btn:active{transform:scale(0.97);}
+  .btn-primary{background:var(--ink); color:var(--white); width:100%;}
+  .btn-whatsapp{background:#25D366; color:#fff; width:100%;}
+  .btn-outline{background:transparent; color:var(--ink); border:1.5px solid var(--ink);}
+  .btn-sm{padding:8px 12px; font-size:13px; flex:1;}
+  .toggle-row{display:flex; gap:8px;}
+  .child-card{border:1px solid var(--line); border-radius:6px; padding:16px; margin-bottom:14px; position:relative; background:var(--paper-panel);}
+  .child-card .remove{position:absolute; top:10px; right:10px; background:none; border:none; color:var(--bordeaux); font-weight:700; font-size:15px; cursor:pointer;}
+  .child-label{font-size:11.5px; font-weight:700; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin-bottom:10px;}
+  .confirm-screen{text-align:center; padding:50px 20px;}
+  .confirm-screen .icon{font-size:52px; margin-bottom:16px;}
+  .confirm-screen h2{font-family:'Fraunces',serif; font-size:22px; margin:0 0 12px; border:none; padding:0;}
+  .confirm-screen p{color:var(--ink-soft); font-size:15px; line-height:1.6;}
+  .confirm-screen .btn{margin-top:12px;}
+  .error-msg{color:var(--bordeaux); font-size:13.5px; margin-top:10px; display:none;}
+  .hint{font-size:11.5px; color:var(--ink-soft); margin-top:4px;}
+  .warn-box{background:#FFF6E5; border:1px solid var(--brass); color:#7A5C1E; border-radius:6px; padding:10px 12px; font-size:12.5px; margin-bottom:14px; display:none;}
+  @media (max-width:480px){ .form-grid{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+
+<div class="wrap" id="app">
+
+  <!-- ============ PAGE D'ACCUEIL ============ -->
+  <div id="accueil">
+    <svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="50" cy="50" r="47" fill="#fff" stroke="#8B2635" stroke-width="3"/>
+      <circle cx="50" cy="50" r="39" fill="none" stroke="#1B2A4A" stroke-width="1.5"/>
+      <path d="M28 40 L50 30 L72 40 L50 50 Z" fill="#1B2A4A"/>
+      <path d="M28 40 V56 Q28 60 32 61 L50 68 L68 61 Q72 60 72 56 V40" fill="none" stroke="#1B2A4A" stroke-width="2.5"/>
+      <line x1="72" y1="40" x2="72" y2="54" stroke="#8B2635" stroke-width="2"/>
+      <text x="50" y="86" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="9" font-weight="700" fill="#8B2635">CSTP</text>
+    </svg>
+    <div class="officiel">
+      <p class="pays">RÉPUBLIQUE DU BÉNIN</p>
+      <p>MINISTÈRE DE L'ENSEIGNEMENT MATERNEL ET PRIMAIRE</p>
+    </div>
+    <h1>COMPLEXE SCOLAIRE TERRE PROMISE — TPM</h1>
+    <p class="tel">Tél : (+229) 0197102175 / 0168209030</p>
+
+    <svg class="illustration" viewBox="0 0 320 200" xmlns="http://www.w3.org/2000/svg">
+      <rect x="10" y="15" width="130" height="80" rx="4" fill="#2F4A3D"/>
+      <rect x="18" y="23" width="114" height="64" rx="2" fill="#3B5C4C"/>
+      <line x1="30" y1="40" x2="90" y2="40" stroke="#EAF4FC" stroke-width="2" opacity=".6"/>
+      <line x1="30" y1="52" x2="110" y2="52" stroke="#EAF4FC" stroke-width="2" opacity=".6"/>
+      <line x1="30" y1="64" x2="75" y2="64" stroke="#EAF4FC" stroke-width="2" opacity=".6"/>
+      <!-- enseignante -->
+      <circle cx="150" cy="60" r="13" fill="#D8A878"/>
+      <path d="M150 48 Q140 46 140 58 Q140 50 150 50 Q160 50 160 58 Q160 46 150 48 Z" fill="#2B2118"/>
+      <rect x="136" y="72" width="28" height="46" rx="8" fill="#8B2635"/>
+      <rect x="128" y="78" width="10" height="30" rx="5" fill="#8B2635"/>
+      <rect x="162" y="78" width="10" height="26" rx="5" fill="#8B2635"/>
+      <rect x="140" y="116" width="8" height="30" rx="3" fill="#1B2A4A"/>
+      <rect x="152" y="116" width="8" height="30" rx="3" fill="#1B2A4A"/>
+      <!-- écoliers -->
+      <g>
+        <circle cx="205" cy="140" r="9" fill="#C99566"/>
+        <rect x="196" y="149" width="18" height="26" rx="6" fill="#A9781F"/>
+        <rect x="199" y="173" width="6" height="18" fill="#1B2A4A"/>
+        <rect x="207" y="173" width="6" height="18" fill="#1B2A4A"/>
+      </g>
+      <g>
+        <circle cx="235" cy="145" r="9" fill="#8A5A3B"/>
+        <rect x="226" y="154" width="18" height="26" rx="6" fill="#2F6B4F"/>
+        <rect x="229" y="178" width="6" height="16" fill="#1B2A4A"/>
+        <rect x="237" y="178" width="6" height="16" fill="#1B2A4A"/>
+      </g>
+      <g>
+        <circle cx="265" cy="142" r="9" fill="#D8A878"/>
+        <rect x="256" y="151" width="18" height="26" rx="6" fill="#B5651D"/>
+        <rect x="259" y="175" width="6" height="17" fill="#1B2A4A"/>
+        <rect x="267" y="175" width="6" height="17" fill="#1B2A4A"/>
+      </g>
+      <g>
+        <circle cx="295" cy="146" r="9" fill="#C99566"/>
+        <rect x="286" y="155" width="18" height="26" rx="6" fill="#6B4C8A"/>
+        <rect x="289" y="179" width="6" height="16" fill="#1B2A4A"/>
+        <rect x="297" y="179" width="6" height="16" fill="#1B2A4A"/>
+      </g>
+      <line x1="5" y1="197" x2="315" y2="197" stroke="#D9D2BE" stroke-width="2"/>
+    </svg>
+
+    <div class="bienvenue">
+      <h2>Bienvenue !</h2>
+      <p>Le <strong>Complexe Scolaire Terre Promise</strong> vous accueille avec joie. Notre établissement offre à chaque enfant un cadre d'apprentissage sérieux, sécurisant et chaleureux, porté par une équipe pédagogique engagée pour la réussite de vos enfants.</p>
+      <p>Inscrivez dès maintenant votre (vos) enfant(s) en quelques minutes, directement depuis votre téléphone.</p>
+      <button type="button" class="btn btn-primary btn-inscrire" onclick="allerVersFormulaire()">Passer à l'inscription de vos enfants</button>
+    </div>
+  </div>
+
+  <!-- ============ FORMULAIRE D'INSCRIPTION ============ -->
+  <div id="formPage" style="display:none;">
+    <div class="form-header">
+      <span class="stamp">CSTP INSCRIPTION</span>
+      <h1>Demande d'inscription</h1>
+      <p>Les champs marqués <span style="color:#8B2635;">*</span> sont obligatoires</p>
+    </div>
+    <div class="content">
+      <div id="formArea">
+        <div class="card">
+          <h2>Identification des parents</h2>
+          <h3>Père</h3>
+          <div class="form-grid">
+            <div class="field wide"><label>Nom &amp; prénom du père</label><input id="f_pereNom"></div>
+            <div class="field"><label>Téléphone</label><input id="f_pereTel1" type="tel"></div>
+            <div class="field"><label>Travail</label><input id="f_pereTravail" placeholder="ex: Menuisier, Fonctionnaire…"></div>
+          </div>
+          <h3 style="margin-top:18px;">Mère</h3>
+          <div class="form-grid">
+            <div class="field wide"><label>Nom &amp; prénom de la mère</label><input id="f_mereNom"></div>
+            <div class="field"><label>Téléphone</label><input id="f_mereTel1" type="tel"></div>
+            <div class="field"><label>Travail</label><input id="f_mereTravail" placeholder="ex: Commerçante, Enseignante…"></div>
+          </div>
+          <h3 style="margin-top:18px;">Contact</h3>
+          <div class="form-grid">
+            <div class="field wide"><label>Email (optionnel)</label><input id="f_email" type="email"></div>
+            <div class="field wide"><label>Personne à contacter en cas d'urgence (téléphone)</label><input id="f_contactUrgence" type="tel" placeholder="ex: 0197102175"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Enfant(s) à inscrire</h2>
+          <div id="enfantsContainer"></div>
+          <button type="button" class="btn btn-outline" style="width:100%;" onclick="ajouterEnfant()">+ Ajouter un enfant</button>
+        </div>
+
+        <div class="warn-box" id="doublonWarning"></div>
+        <button type="button" class="btn btn-primary" onclick="envoyerDemande()" id="btnEnvoyer">Envoyer la demande d'inscription</button>
+        <p class="error-msg" id="erreurMsg"></p>
+        <p class="hint" style="text-align:center; margin-top:14px;">Cette demande sera examinée par l'école. Le paiement des frais et la finalisation de l'inscription se font <strong>directement à l'administration</strong>.</p>
+      </div>
+
+      <div class="confirm-screen" id="confirmScreen" style="display:none;">
+        <div class="icon">✅</div>
+        <h2>Demande envoyée avec succès</h2>
+        <p>Merci ! Votre demande d'inscription a bien été transmise à l'école.<br><br>Rendez-vous à l'administration pour finaliser l'inscription et effectuer le paiement des frais de scolarité.</p>
+        <button type="button" class="btn btn-whatsapp" onclick="notifierEcoleWhatsApp()">📲 Prévenir l'école par WhatsApp</button>
+        <button type="button" class="btn btn-outline" onclick="reinitialiserFormulaire()">Faire une nouvelle demande</button>
+
+        <div style="margin-top:34px; padding-top:28px; border-top:2px dashed var(--line); text-align:left;">
+          <div style="background:#FFF8EA; border:1.5px solid var(--brass); border-radius:10px; padding:20px;">
+            <p style="text-align:center; font-size:28px; margin:0 0 8px;">📚</p>
+            <h2 style="text-align:center; font-family:'Fraunces',serif; font-size:18px; margin:0 0 10px; color:var(--ink); border:none; padding:0;">Fournitures scolaires disponibles à l'école</h2>
+            <p style="font-size:14px; line-height:1.6; color:var(--ink-soft); text-align:center; margin:0;">Cahiers, stylos, uniformes et tout le matériel nécessaire à vos enfants sont en vente <strong>directement à l'école</strong>, au <strong>prix du marché</strong>. Pensez-y lors de votre passage pour l'inscription !</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyC9CvADoZasKhysfj3eT_ljDENR1a2YsH0",
+  authDomain: "ecole-terre-promise.firebaseapp.com",
+  projectId: "ecole-terre-promise",
+  storageBucket: "ecole-terre-promise.firebasestorage.app",
+  messagingSenderId: "365556294809",
+  appId: "1:365556294809:web:657276f665c23065c7c408"
+};
+const TELEPHONE_ECOLE = "0197102175"; // numéro qui recevra la notification WhatsApp
+let firestoreDb = null;
+try{
+  firebase.initializeApp(firebaseConfig);
+  firestoreDb = firebase.firestore();
+}catch(e){ console.warn('Firebase indisponible', e); }
+
+let enfantCounter = 0;
+let derniereDemandeTexte = '';
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+function escapeHtml(s){ const d=document.createElement('div'); d.innerText=s||''; return d.innerHTML; }
+
+function allerVersFormulaire(){
+  document.getElementById('accueil').style.display = 'none';
+  document.getElementById('formPage').style.display = 'block';
+  window.scrollTo(0,0);
+}
+
+function enfantCardHtml(idx){
+  return `
+  <div class="child-card" data-idx="${idx}">
+    <button type="button" class="remove" onclick="this.closest('.child-card').remove()" title="Retirer cet enfant">✕</button>
+    <div class="child-label">Enfant ${idx}</div>
+    <div class="form-grid">
+      <div class="field"><label>Prénom <span class="req">*</span></label><input class="fc_prenom"></div>
+      <div class="field"><label>Nom <span class="req">*</span></label><input class="fc_nom"></div>
+      <div class="field">
+        <label>Sexe <span class="req">*</span></label>
+        <input type="hidden" class="fc_sexe" value="">
+        <div class="toggle-row">
+          <button type="button" class="btn btn-outline btn-sm fc_sexe_btn_M" onclick="setSexe(${idx},'M')">M</button>
+          <button type="button" class="btn btn-outline btn-sm fc_sexe_btn_F" onclick="setSexe(${idx},'F')">F</button>
+        </div>
+      </div>
+      <div class="field"><label>Date de naissance</label><input type="date" class="fc_naissance"></div>
+      <div class="field wide"><label>Lieu de naissance</label><input class="fc_lieu" placeholder="ex: Cotonou"></div>
+      <div class="field"><label>Classe souhaitée <span class="req">*</span></label><input class="fc_classe" placeholder="ex: CM2-A"></div>
+      <div class="field">
+        <label>Niveau</label>
+        <input type="hidden" class="fc_niveau" value="Primaire">
+        <div class="toggle-row">
+          <button type="button" class="btn btn-primary btn-sm fc_niveau_btn_Primaire" onclick="setNiveau(${idx},'Primaire')">Prim</button>
+          <button type="button" class="btn btn-outline btn-sm fc_niveau_btn_Collège" onclick="setNiveau(${idx},'Collège')">Sec</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function ajouterEnfant(){
+  enfantCounter++;
+  document.getElementById('enfantsContainer').insertAdjacentHTML('beforeend', enfantCardHtml(enfantCounter));
+}
+function setSexe(idx, valeur){
+  const row = document.querySelector(`.child-card[data-idx="${idx}"]`);
+  if(!row) return;
+  row.querySelector('.fc_sexe').value = valeur;
+  row.querySelector('.fc_sexe_btn_M').className = 'btn btn-sm ' + (valeur==='M'?'btn-primary':'btn-outline') + ' fc_sexe_btn_M';
+  row.querySelector('.fc_sexe_btn_F').className = 'btn btn-sm ' + (valeur==='F'?'btn-primary':'btn-outline') + ' fc_sexe_btn_F';
+}
+function setNiveau(idx, valeur){
+  const row = document.querySelector(`.child-card[data-idx="${idx}"]`);
+  if(!row) return;
+  row.querySelector('.fc_niveau').value = valeur;
+  row.querySelector('.fc_niveau_btn_Primaire').className = 'btn btn-sm ' + (valeur==='Primaire'?'btn-primary':'btn-outline') + ' fc_niveau_btn_Primaire';
+  row.querySelector('.fc_niveau_btn_Collège').className = 'btn btn-sm ' + (valeur==='Collège'?'btn-primary':'btn-outline') + ' fc_niveau_btn_Collège';
+}
+
+async function envoyerDemande(){
+  const erreurEl = document.getElementById('erreurMsg');
+  const warnEl = document.getElementById('doublonWarning');
+  erreurEl.style.display = 'none';
+  warnEl.style.display = 'none';
+  document.querySelectorAll('.champ-erreur').forEach(el=>el.classList.remove('champ-erreur'));
+
+  const pereNom = document.getElementById('f_pereNom').value.trim();
+  const mereNom = document.getElementById('f_mereNom').value.trim();
+  if(!pereNom && !mereNom){
+    erreurEl.textContent = "Renseigne au moins le nom du père ou de la mère.";
+    erreurEl.style.display = 'block';
+    return;
+  }
+
+  const cartes = document.querySelectorAll('#enfantsContainer .child-card');
+  if(cartes.length===0){
+    erreurEl.textContent = "Ajoute au moins un enfant.";
+    erreurEl.style.display = 'block';
+    return;
+  }
+
+  // Validation des champs obligatoires : prénom, nom, sexe, classe
+  let champsManquants = false;
+  const enfants = [];
+  cartes.forEach(row=>{
+    const prenomInput = row.querySelector('.fc_prenom');
+    const nomInput = row.querySelector('.fc_nom');
+    const classeInput = row.querySelector('.fc_classe');
+    const sexe = row.querySelector('.fc_sexe').value;
+    const prenom = prenomInput.value.trim();
+    const nom = nomInput.value.trim();
+    const classe = classeInput.value.trim();
+
+    if(!prenom){ prenomInput.classList.add('champ-erreur'); champsManquants = true; }
+    if(!nom){ nomInput.classList.add('champ-erreur'); champsManquants = true; }
+    if(!classe){ classeInput.classList.add('champ-erreur'); champsManquants = true; }
+    if(!sexe){
+      row.querySelector('.fc_sexe_btn_M').classList.add('champ-erreur');
+      row.querySelector('.fc_sexe_btn_F').classList.add('champ-erreur');
+      champsManquants = true;
+    }
+
+    if(prenom && nom){
+      enfants.push({
+        prenom, nom, sexe,
+        dateNaissance: row.querySelector('.fc_naissance').value,
+        lieuNaissance: row.querySelector('.fc_lieu').value.trim(),
+        classe,
+        niveau: row.querySelector('.fc_niveau').value,
+        fraisInscriptionActif: true,
+      });
+    }
+  });
+
+  if(champsManquants){
+    erreurEl.textContent = "Merci de remplir tous les champs obligatoires (marqués d'une *) pour chaque enfant : nom, prénom, sexe et classe.";
+    erreurEl.style.display = 'block';
+    return;
+  }
+
+  if(!firestoreDb){
+    erreurEl.textContent = "Connexion au service en ligne indisponible. Vérifie ta connexion Internet et réessaie.";
+    erreurEl.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('btnEnvoyer');
+  btn.disabled = true;
+  btn.textContent = "Vérification en cours…";
+
+  // Vérification anti-doublon : cherche si un enfant du même nom+prénom+date de naissance a déjà une demande en attente
+  try{
+    const snap = await firestoreDb.collection('inscriptions_attente').where('statut','==','attente').get();
+    const dejaSoumis = [];
+    snap.forEach(doc=>{
+      const data = doc.data();
+      (data.enfants||[]).forEach(e=>{
+        enfants.forEach(nouvel=>{
+          if((e.nom||'').trim().toLowerCase()===nouvel.nom.trim().toLowerCase() &&
+             (e.prenom||'').trim().toLowerCase()===nouvel.prenom.trim().toLowerCase() &&
+             (e.dateNaissance||'')===nouvel.dateNaissance){
+            dejaSoumis.push(nouvel.prenom + ' ' + nouvel.nom);
+          }
+        });
+      });
+    });
+    if(dejaSoumis.length>0){
+      warnEl.textContent = `⚠ Une demande pour ${dejaSoumis.join(', ')} a déjà été envoyée et est en attente de traitement par l'école. Merci de patienter au lieu d'envoyer une nouvelle demande pour le(s) même(s) enfant(s).`;
+      warnEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = "Envoyer la demande d'inscription";
+      return;
+    }
+  }catch(e){
+    console.warn('Vérification anti-doublon impossible', e);
+  }
+
+  btn.textContent = "Envoi en cours…";
+
+  const demande = {
+    pereNom, pereTel1: document.getElementById('f_pereTel1').value.trim(), pereTravail: document.getElementById('f_pereTravail').value.trim(),
+    mereNom, mereTel1: document.getElementById('f_mereTel1').value.trim(), mereTravail: document.getElementById('f_mereTravail').value.trim(),
+    parentEmail: document.getElementById('f_email').value.trim(),
+    contactUrgence: document.getElementById('f_contactUrgence').value.trim(),
+    enfants,
+    dateInscription: new Date().toISOString().slice(0,10),
+    dateSoumission: new Date().toISOString().slice(0,10),
+    statut: 'attente',
+  };
+
+  try{
+    await firestoreDb.collection('inscriptions_attente').add(demande);
+    derniereDemandeTexte = `Nouvelle demande d'inscription CSTP\nParent(s) : ${[pereNom, mereNom].filter(Boolean).join(' & ')}\nEnfant(s) : ${enfants.map(e=>e.prenom+' '+e.nom).join(', ')}`;
+    document.getElementById('formArea').style.display = 'none';
+    document.getElementById('confirmScreen').style.display = 'block';
+    window.scrollTo(0,0);
+  }catch(e){
+    console.error(e);
+    erreurEl.textContent = "L'envoi a échoué. Vérifie ta connexion Internet et réessaie.";
+    erreurEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = "Envoyer la demande d'inscription";
+  }
+}
+
+function notifierEcoleWhatsApp(){
+  const url = `https://wa.me/229${TELEPHONE_ECOLE.replace(/^0/,'')}?text=${encodeURIComponent(derniereDemandeTexte)}`;
+  window.open(url, '_blank');
+}
+
+function reinitialiserFormulaire(){
+  document.getElementById('f_pereNom').value = '';
+  document.getElementById('f_pereTel1').value = '';
+  document.getElementById('f_pereTravail').value = '';
+  document.getElementById('f_mereNom').value = '';
+  document.getElementById('f_mereTel1').value = '';
+  document.getElementById('f_mereTravail').value = '';
+  document.getElementById('f_email').value = '';
+  document.getElementById('f_contactUrgence').value = '';
+  document.getElementById('enfantsContainer').innerHTML = '';
+  document.getElementById('doublonWarning').style.display = 'none';
+  enfantCounter = 0;
+  ajouterEnfant();
+  const btn = document.getElementById('btnEnvoyer');
+  btn.disabled = false;
+  btn.textContent = "Envoyer la demande d'inscription";
+  document.getElementById('confirmScreen').style.display = 'none';
+  document.getElementById('formArea').style.display = 'block';
+}
+
+ajouterEnfant();
+</script>
+</body>
+</html>

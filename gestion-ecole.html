@@ -374,6 +374,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <body>
 
 <div id="lockScreen" class="lock-screen">
@@ -405,6 +407,21 @@ const JOURS = ["Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
 let state = { students:[], payments:[], schedule:[], attendance:[], messages:[], finances:[], grades:[], fraisScolarite:{}, staff:[], staffPayments:[], parentRegistry:{}, parentSeqCounter:0,
   plagesHoraires: ["08:00-10:00","10:00-12:00","14:00-16:00","16:00-18:00"], documents:[], documentLoans:[], reductionsFamille:{}, planningActivites:[], financesArchive:{}, budgetLignes:[], budgetArchive:{},
   schoolInfo: { nom:"COMPLEXE SCOLAIRE TERRE PROMISE", telephone:"0197102175 / 01682090", anneeScolaire:"2025-2026", directeur:"", logo:null, signature:null, cachet:null, primeSeuil:10, primeMontant:0, fraisInscriptionPrimaire:0, fraisInscriptionCollege:0 } };
+/* ============ FIREBASE (inscriptions à distance) ============ */
+const firebaseConfig = {
+  apiKey: "AIzaSyC9CvADoZasKhysfj3eT_ljDENR1a2YsH0",
+  authDomain: "ecole-terre-promise.firebaseapp.com",
+  projectId: "ecole-terre-promise",
+  storageBucket: "ecole-terre-promise.firebasestorage.app",
+  messagingSenderId: "365556294809",
+  appId: "1:365556294809:web:657276f665c23065c7c408"
+};
+let firestoreDb = null;
+try{
+  firebase.initializeApp(firebaseConfig);
+  firestoreDb = firebase.firestore();
+}catch(e){ console.warn('Firebase indisponible (pas de connexion ?), la Validation à distance ne fonctionnera pas.', e); }
+
 let currentTab = 'dashboard';
 let attDate = new Date().toISOString().slice(0,10);
 let familyChildRowCounter = 0;
@@ -484,6 +501,7 @@ function buildShell(){
     {id:'documents', label:"Documents & Outils", num:'10', color:'#5A6472'},
     {id:'planning', label:"Planning", num:'11', color:'#7A5C3E'},
     {id:'budget', label:"Budget", num:'12', color:'#1F7A6C'},
+    {id:'validation', label:"Validation", num:'13', color:'#B5651D'},
     {id:'settings', label:"Réglages", num:'⚙', color:'#4A5568'},
   ];
   document.getElementById('app').innerHTML = `
@@ -499,7 +517,9 @@ function buildShell(){
   document.querySelectorAll('.tab-btn').forEach(b=>{
     b.addEventListener('click', ()=>{
       if(b.dataset.tab==='settings'){ openSchoolSettings(); return; }
-      currentTab = b.dataset.tab; render();
+      currentTab = b.dataset.tab;
+      render();
+      if(currentTab==='validation') chargerValidation();
     });
   });
 }
@@ -520,6 +540,7 @@ function render(){
   else if(currentTab==='documents') main.innerHTML = renderDocuments();
   else if(currentTab==='planning') main.innerHTML = renderPlanning();
   else if(currentTab==='budget') main.innerHTML = renderBudget();
+  else if(currentTab==='validation') main.innerHTML = renderValidation();
   else if(currentTab==='promotion') main.innerHTML = renderPromotion();
   attachHandlers();
 }
@@ -773,6 +794,7 @@ function openStudentForm(id){
       <div class="field"><label>Email de contact</label><input id="f_parentEmail" value="${s?escapeHtml(s.parentEmail):''}"></div>
       <div class="field"><label>Date d'inscription</label><input type="date" id="f_inscription" value="${s?s.dateInscription:new Date().toISOString().slice(0,10)}"></div>
       <div class="field"><label>Arriéré (année précédente, FCFA)</label><input type="number" step="1" id="f_arriere" value="${s&&s.arriere?s.arriere:''}" placeholder="0"></div>
+      <div class="field" style="grid-column:1/-1;"><label>Personne à contacter en cas d'urgence (téléphone)</label><input id="f_contactUrgence" value="${s?escapeHtml(s.contactUrgence):''}" placeholder="ex: 0197102175"></div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-outline" onclick="closeModal()">Annuler</button>
@@ -820,6 +842,7 @@ async function saveStudent(id){
     parentEmail: document.getElementById('f_parentEmail').value.trim(),
     dateInscription: document.getElementById('f_inscription').value,
     arriere: parseFloat(document.getElementById('f_arriere').value)||0,
+    contactUrgence: document.getElementById('f_contactUrgence').value.trim(),
   };
   if(!data.prenom || !data.nom){ alert("Le prénom et le nom sont requis."); return; }
   if(id){
@@ -1688,14 +1711,14 @@ function exportStudentsPDF(){
   if(list.length===0){ alert("Aucun élève à exporter pour ce filtre."); return; }
   try{
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    const doc = nouveauPDF();
     doc.setFontSize(10);
     const startY = pdfHeader(doc, `Liste des élèves — ${cls || "Toute l'école"}`);
     doc.autoTable({
       startY,
       head: [['Matricule','Nom','Prénom','Classe','Sexe','Date naiss.','Lieu de naissance','Téléphone']],
       body: list.map(s=>[s.matricule||'—', s.nom, s.prenom, s.classe||'—', s.sexe||'—', s.dateNaissance||'—', s.lieuNaissance||'—', primaryParentPhone(s)||'—']),
-      styles:{fontSize:9},
+      styles:{font:'times', fontSize:9},
       headStyles:{fillColor:[27,42,74]}
     });
     pdfSignature(doc, doc.lastAutoTable.finalY + 20);
@@ -1767,7 +1790,7 @@ function exportNotesPDF(){
       });
     });
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    const doc = nouveauPDF();
     const startY = pdfHeader(doc, `Moyennes annuelles — ${cls || "Toute l'école"}`);
     const maxDevoirs = Math.max(5, ...list.map(s=>devoirCount(s.niveau)));
     const head = [['Élève','Classe', ...Array.from({length:maxDevoirs},(_,i)=>'D'+(i+1)), 'Moyenne','Rang','Statut']];
@@ -1785,7 +1808,7 @@ function exportNotesPDF(){
       const rang = rInfo.ranks[s.id];
       return [`${s.prenom} ${s.nom}`, s.classe||'—', ...noteCells, moyenne!==null?moyenne.toFixed(2):'—', rang?rangLabel(rang,rInfo.total):'—', moyenne===null?'—':(moyenne>=10?'Passe':'Redouble')];
     });
-    doc.autoTable({ startY, head, body, styles:{fontSize:8}, headStyles:{fillColor:[27,42,74]} });
+    doc.autoTable({ startY, head, body, styles:{font:'times', fontSize:8}, headStyles:{fillColor:[27,42,74]} });
     pdfSignature(doc, doc.lastAutoTable.finalY + 20);
     doc.save(`notes-${cls||'toute-ecole'}-${todayStr()}.pdf`);
   }catch(e){ alert("Export impossible : connecte-toi une fois à Internet pour charger l'outil d'export, puis réessaie."); }
@@ -1820,13 +1843,13 @@ function exportFinancesPDF(){
     const recettes = list.filter(f=>f.type==='recette').reduce((s,f)=>s+Number(f.montant||0),0);
     const depenses = list.filter(f=>f.type==='depense').reduce((s,f)=>s+Number(f.montant||0),0);
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    const doc = nouveauPDF();
     const startY = pdfHeader(doc, `Finances — ${periodLabel()}`);
     doc.autoTable({
       startY,
       head: [['Date','Type','Catégorie','Description','Montant']],
       body: list.map(f=>[f.date||'—', f.type==='recette'?'Recette':'Dépense', f.categorie||'', f.description||'—', (f.type==='recette'?'+':'-')+formatMontant(f.montant)]),
-      styles:{fontSize:8},
+      styles:{font:'times', fontSize:8},
       headStyles:{fillColor:[27,42,74]}
     });
     const y = doc.lastAutoTable.finalY + 10;
@@ -2082,6 +2105,15 @@ function soldeEleve(s){
 }
 
 /* Helper : en-tête PDF commun à tous les exports */
+/* Crée un nouveau document PDF avec une mise en forme uniforme : Times New Roman, interligne 1,15, taille 14 */
+function nouveauPDF(options){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF(options);
+  doc.setFont('times', 'normal');
+  doc.setFontSize(14);
+  doc.setLineHeightFactor(1.15);
+  return doc;
+}
 function pdfHeader(doc, title){
   const info = state.schoolInfo;
   const hasLogo = !!info.logo;
@@ -2464,7 +2496,7 @@ async function deleteStaffPayment(id){
 }
 function buildFichePaieDoc(sp, st){
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+  const doc = nouveauPDF();
   const startY = pdfHeader(doc, "FICHE DE PAIE");
   doc.setFontSize(10);
   const staffName = st ? `${st.prenom} ${st.nom}` : '—';
@@ -2504,7 +2536,7 @@ function buildFichePaieDoc(sp, st){
   doc.autoTable({
     startY: startY + 4,
     body: lignes,
-    styles:{fontSize:10, cellPadding:4},
+    styles:{font:'times', fontSize:10, cellPadding:4},
     columnStyles:{0:{fontStyle:'bold', cellWidth:80}},
     theme:'grid'
   });
@@ -2934,7 +2966,7 @@ async function envoyerRapportFamilleWhatsApp(key){
 function buildCertificatTravailDoc(st){
   const info = state.schoolInfo;
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+  const doc = nouveauPDF();
   const startY = pdfHeader(doc, "CERTIFICAT DE TRAVAIL");
 
   const genreDirecteur = info.directeur && /^Mme|^Madame/i.test(info.directeur) ? 'e' : '';
@@ -2992,7 +3024,7 @@ function downloadCertificatScolarite(studentId){
   try{
     const info = state.schoolInfo;
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    const doc = nouveauPDF();
     const startY = pdfHeader(doc, "CERTIFICAT DE SCOLARITÉ");
 
     const genre = s.sexe==='F' ? 'e' : '';
@@ -3274,6 +3306,7 @@ function openFamilyRegistrationForm(){
     <div class="form-grid">
       <div class="field"><label>Email de contact</label><input id="fam_email"></div>
       <div class="field"><label>Date d'inscription (commune)</label><input type="date" id="fam_dateInscription" value="${new Date().toISOString().slice(0,10)}"></div>
+      <div class="field" style="grid-column:1/-1;"><label>Personne à contacter en cas d'urgence (téléphone)</label><input id="fam_contactUrgence" placeholder="ex: 0197102175"></div>
     </div>
     <div style="border-top:1px solid var(--line); margin:14px 0 12px; padding-top:12px;">
       <p style="font-size:12.5px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin:0 0 10px;">Enfant(s) à inscrire</p>
@@ -3318,6 +3351,7 @@ async function saveFamilyRegistration(){
   const mereTravail = document.getElementById('fam_mereTravail').value.trim();
   const parentEmail = document.getElementById('fam_email').value.trim();
   const dateInscription = document.getElementById('fam_dateInscription').value;
+  const contactUrgence = document.getElementById('fam_contactUrgence').value.trim();
 
   if(!pereNom && !mereNom){ alert("Renseigne au moins le nom du père ou de la mère."); return; }
 
@@ -3352,7 +3386,7 @@ async function saveFamilyRegistration(){
       reductionRedoublant: false,
       fraisInscriptionActif: child.fraisInscriptionActif,
       pereNom, pereTel1, pereTravail, mereNom, mereTel1, mereTravail, parentEmail,
-      dateInscription, arriere: child.arriere,
+      dateInscription, arriere: child.arriere, contactUrgence,
     };
     state.students.push(newStudent);
     if(child.verse > 0){
@@ -3378,7 +3412,7 @@ function exportSchedulePDF(){
   if(slots.length===0){ alert("Aucun cours renseigné pour cette classe."); return; }
   try{
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'landscape' });
+    const doc = nouveauPDF({ orientation: 'landscape' });
     const startY = pdfHeader(doc, `Emploi du temps — ${selClass || "Toute l'école"}`);
     const plages = state.plagesHoraires;
     const head = [['Horaire', ...JOURS]];
@@ -3393,7 +3427,7 @@ function exportSchedulePDF(){
     doc.autoTable({
       startY,
       head, body,
-      styles:{fontSize:9, cellPadding:3, valign:'middle'},
+      styles:{font:'times', fontSize:9, cellPadding:3, valign:'middle'},
       headStyles:{fillColor:[27,42,74]},
       columnStyles:{0:{fontStyle:'bold', cellWidth:28}}
     });
@@ -3406,7 +3440,7 @@ function exportSchedulePDF(){
 function buildMessagePDFDoc(m){
   const s = m.studentId ? state.students.find(x=>x.id===m.studentId) : null;
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+  const doc = nouveauPDF();
   const startY = pdfHeader(doc, typeLabel(m.type).toUpperCase());
 
   const nomParents = s ? [s.pereNom, s.mereNom].filter(Boolean).join(' et ') : '';
@@ -3645,7 +3679,7 @@ async function rendreDocument(loanId){
 
 function buildStaffDocumentsPDFDoc(staffName){
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
+  const doc = nouveauPDF();
   const startY = pdfHeader(doc, "Documents & outils à la charge de");
   doc.setFontSize(13);
   doc.setFont(undefined, 'bold');
@@ -3660,7 +3694,7 @@ function buildStaffDocumentsPDFDoc(staffName){
       const d = state.documents.find(x=>x.id===l.documentId);
       return [d?d.nom:'—', (d&&d.classe)||'—', formatMontant(d?d.prix:0), l.datePris, l.heurePris, l.abime?'Abîmé/Perdu':'En cours'];
     }),
-    styles:{fontSize:10},
+    styles:{font:'times', fontSize:10},
     headStyles:{fillColor:[27,42,74]}
   });
   const totalDeductions = loans.filter(l=>l.abime).reduce((sum,l)=>{
@@ -3723,7 +3757,7 @@ function exportSyntheseNotesPDF(){
   if(list.length===0){ alert("Aucun élève à exporter pour ce filtre."); return; }
   try{
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    const doc = nouveauPDF();
     let y = pdfHeader(doc, `Synthèse des résultats — ${cls || "Toute l'école"}`);
 
     const byClasse = {};
@@ -3758,7 +3792,7 @@ function exportSyntheseNotesPDF(){
           startY: y+7,
           head: [['','Garçons','Filles','Total']],
           body: d.asRows(),
-          styles:{fontSize:8, cellPadding:2.5},
+          styles:{font:'times', fontSize:8, cellPadding:2.5},
           headStyles:{fillColor:[27,42,74]},
           margin:{left:14, right:14},
         });
@@ -3782,7 +3816,7 @@ function exportSyntheseNotesPDF(){
         startY: y+7,
         head: [['','Garçons','Filles','Total']],
         body: dAnnuel.asRows(),
-        styles:{fontSize:8, cellPadding:2.5},
+        styles:{font:'times', fontSize:8, cellPadding:2.5},
         headStyles:{fillColor:[27,42,74]},
         margin:{left:14, right:14},
       });
@@ -3877,7 +3911,7 @@ function exportAttendancePDF(){
     const dayRecords = {};
     state.attendance.filter(a=>a.date===attDate).forEach(a=> dayRecords[a.studentId]=a.statut);
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    const doc = nouveauPDF();
     const startY = pdfHeader(doc, `Présences — ${cls || "Toute l'école"}`);
     doc.setFontSize(10);
     doc.text(`Date : ${attDate}`, 14, startY - 2);
@@ -3891,7 +3925,7 @@ function exportAttendancePDF(){
         const statutTxt = abandonPermanent ? 'Abandon' : (statutJour ? (libelle[statutJour]||statutJour) : 'Présent');
         return [`${s.prenom} ${s.nom}`, s.classe||'—', statutTxt];
       }),
-      styles:{fontSize:10},
+      styles:{font:'times', fontSize:10},
       headStyles:{fillColor:[27,42,74]},
     });
     pdfSignature(doc, doc.lastAutoTable.finalY + 20);
@@ -3951,7 +3985,7 @@ function exportPourcentageRestantsPDF(){
   if(actifs.length===0){ alert("Aucun élève à exporter."); return; }
   try{
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    const doc = nouveauPDF();
     let y = pdfHeader(doc, "Pourcentage des restants dûs");
 
     // Un tableau distinct par classe
@@ -3972,7 +4006,7 @@ function exportPourcentageRestantsPDF(){
           const pct = totalDu>0 ? Math.round(restant/totalDu*1000)/10 : 0;
           return [`${s.prenom} ${s.nom}`, formatMontant(totalDu), formatMontant(restant), totalDu>0?pct+'%':'—'];
         }),
-        styles:{fontSize:8},
+        styles:{font:'times', fontSize:8},
         headStyles:{fillColor:[27,42,74]},
       });
       y = doc.lastAutoTable.finalY + 10;
@@ -3992,7 +4026,7 @@ function exportPourcentageRestantsPDF(){
         ...lignes.map(l=>[l.classe, formatMontant(l.totalDu), formatMontant(l.restant), l.totalDu>0?l.pct+'%':'—']),
         [{content:"Toute l'école", styles:{fontStyle:'bold'}}, {content:formatMontant(totalEcoleDu), styles:{fontStyle:'bold'}}, {content:formatMontant(totalEcoleRestant), styles:{fontStyle:'bold'}}, {content:totalEcoleDu>0?pctEcole+'%':'—', styles:{fontStyle:'bold'}}],
       ],
-      styles:{fontSize:9},
+      styles:{font:'times', fontSize:9},
       headStyles:{fillColor:[27,42,74]},
     });
     pdfSignature(doc, doc.lastAutoTable.finalY + 20);
@@ -4134,7 +4168,7 @@ function exportPlanningPDF(){
       grille[cle].push(`${a.nom} (${formatDateFR(a.date)})`);
     });
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation:'landscape' });
+    const doc = nouveauPDF({ orientation:'landscape' });
     const startY = pdfHeader(doc, `Planning annuel — ${niveau}`);
     const head = [['Mois','Semaine 1','Semaine 2','Semaine 3','Semaine 4','Semaine 5']];
     const body = MOIS_PLANNING.map((mois,moisIndex)=>{
@@ -4145,7 +4179,7 @@ function exportPlanningPDF(){
     doc.autoTable({
       startY,
       head, body,
-      styles:{fontSize:8, cellPadding:2, valign:'top'},
+      styles:{font:'times', fontSize:8, cellPadding:2, valign:'top'},
       columnStyles:{
         0:{fontStyle:'bold', cellWidth:26},
         1:{fillColor:couleursRGB[0]},
@@ -4339,7 +4373,7 @@ function exportBudgetPDF(){
   if(state.budgetLignes.length===0){ alert("Aucune ligne budgétaire à exporter."); return; }
   try{
     const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
+    const doc = nouveauPDF();
     let y = pdfHeader(doc, "Budget — Provisoire & réalisé");
     let totalGeneralEstim = 0, totalGeneralReel = 0;
     state.budgetLignes.forEach(ligne=>{
@@ -4361,7 +4395,7 @@ function exportBudgetPDF(){
         startY: y+4,
         head: [['Élément','Quantité','Prix unitaire','Total estimatif','Date de réalisation','Total réel dépensé']],
         body,
-        styles:{fontSize:8},
+        styles:{font:'times', fontSize:8},
         headStyles:{fillColor:[27,42,74]},
       });
       y = doc.lastAutoTable.finalY + 10;
@@ -4372,6 +4406,145 @@ function exportBudgetPDF(){
     doc.text(`Total général réel dépensé : ${formatMontant(totalGeneralReel)}`, 14, y+8);
     pdfSignature(doc, y + 28);
     doc.save(`budget-${todayStr()}.pdf`);
+  }catch(e){ alert("Export impossible : connecte-toi une fois à Internet pour charger l'outil d'export, puis réessaie."); }
+}
+
+/* ============ VALIDATION DES INSCRIPTIONS À DISTANCE (via Firebase) ============ */
+let validationEnAttente = [];
+let validationChargement = false;
+let validationErreur = null;
+async function chargerValidation(){
+  if(!firestoreDb){ validationErreur = "Connexion au service en ligne indisponible (vérifie ta connexion Internet)."; render(); return; }
+  validationChargement = true; validationErreur = null; render();
+  try{
+    const snap = await firestoreDb.collection('inscriptions_attente').where('statut','==','attente').get();
+    validationEnAttente = snap.docs.map(d=>({ id: d.id, ...d.data() }));
+  }catch(e){
+    validationErreur = "Impossible de récupérer les inscriptions à distance. Vérifie ta connexion Internet.";
+    console.warn('Erreur de chargement Firestore', e);
+  }
+  validationChargement = false;
+  render();
+}
+function renderValidation(){
+  return `
+    <div class="page-head">
+      <div><h2>Validation des inscriptions à distance</h2><p>Demandes envoyées par les parents depuis l'application d'inscription en ligne, en attente du paiement à l'école</p></div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-outline" onclick="chargerValidation()">🔄 Actualiser</button>
+        <button class="btn btn-outline btn-sm" onclick="exportValidationPDF()">📄 Télécharger en PDF</button>
+      </div>
+    </div>
+    ${validationChargement ? '<div class="section-block"><div class="empty">Chargement…</div></div>' : ''}
+    ${validationErreur ? `<div class="section-block"><div class="empty" style="color:var(--bordeaux);">⚠ ${escapeHtml(validationErreur)}</div></div>` : ''}
+    ${(!validationChargement && !validationErreur && validationEnAttente.length===0) ? '<div class="section-block"><div class="empty">Aucune inscription en attente pour le moment.</div></div>' : ''}
+    ${validationEnAttente.map(insc=>renderInscriptionAttenteHtml(insc)).join('')}
+  `;
+}
+/* Un enfant est considéré comme doublon potentiel s'il existe déjà (même nom + prénom + date de naissance) parmi les élèves déjà inscrits */
+function estDoublonPotentiel(e){
+  return state.students.some(s=>
+    (s.nom||'').trim().toLowerCase()===(e.nom||'').trim().toLowerCase() &&
+    (s.prenom||'').trim().toLowerCase()===(e.prenom||'').trim().toLowerCase() &&
+    (s.dateNaissance||'')===(e.dateNaissance||'')
+  );
+}
+function renderInscriptionAttenteHtml(insc){
+  const enfants = insc.enfants||[];
+  const nomParents = [insc.pereNom, insc.mereNom].filter(Boolean).join(' & ') || 'Parent non renseigné';
+  const doublons = enfants.filter(estDoublonPotentiel);
+  return `
+    <div class="section-block">
+      <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+        <div>
+          <strong style="font-family:'Fraunces',serif; font-size:16px;">${escapeHtml(nomParents)}</strong>
+          <div class="mono" style="font-size:12.5px; color:var(--ink-soft); margin-top:3px;">${escapeHtml(insc.pereTel1||insc.mereTel1||'')}${insc.parentEmail?' · '+escapeHtml(insc.parentEmail):''}</div>
+          ${insc.contactUrgence ? `<div class="mono" style="font-size:12px; color:var(--bordeaux); margin-top:2px;">Urgence : ${escapeHtml(insc.contactUrgence)}</div>` : ''}
+          <div style="font-size:11.5px; color:var(--ink-soft);">Reçue le ${insc.dateSoumission ? formatDateFR(insc.dateSoumission) : '—'}</div>
+        </div>
+        <span class="stamp-badge stamp-brass">${enfants.length} enfant${enfants.length>1?'s':''}</span>
+      </div>
+      ${doublons.length>0 ? `<p style="font-size:12.5px; color:var(--bordeaux); background:#FBEAEA; border:1px solid var(--bordeaux); border-radius:4px; padding:8px 10px; margin-bottom:10px;">⚠ Doublon possible : ${doublons.map(d=>escapeHtml(d.prenom+' '+d.nom)).join(', ')} semble déjà inscrit(e) dans la base. Vérifie avant de valider.</p>` : ''}
+      <div style="overflow-x:auto;">
+      <table>
+        <thead><tr><th>Enfant</th><th>Sexe</th><th>Naissance</th><th>Classe souhaitée</th><th>Niveau</th></tr></thead>
+        <tbody>
+          ${enfants.map(e=>`<tr${estDoublonPotentiel(e)?' style="background:#FBEAEA;"':''}><td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td><td>${e.sexe||'—'}</td><td class="mono">${formatDateFR(e.dateNaissance)}</td><td>${escapeHtml(e.classe)||'—'}</td><td>${e.niveau||'—'}</td></tr>`).join('')}
+        </tbody>
+      </table>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+        <button class="btn btn-primary btn-sm" onclick="validerInscriptionAttente('${insc.id}')">✅ Valider (paiement reçu à l'école)</button>
+        <button class="btn btn-danger btn-sm" onclick="rejeterInscriptionAttente('${insc.id}')">🗑 Rejeter</button>
+      </div>
+    </div>
+  `;
+}
+async function validerInscriptionAttente(id){
+  const insc = validationEnAttente.find(x=>x.id===id);
+  if(!insc) return;
+  const enfants = insc.enfants||[];
+  const doublons = enfants.filter(estDoublonPotentiel);
+  const messageBase = `Confirmer la validation de cette inscription pour ${enfants.length} enfant(s) ? Une fiche élève complète (avec matricule) sera créée pour chacun.`;
+  const message = doublons.length>0
+    ? `⚠ Attention : ${doublons.map(d=>d.prenom+' '+d.nom).join(', ')} semble déjà inscrit(e). ${messageBase}`
+    : messageBase;
+  if(!(await confirmModal(message))) return;
+  enfants.forEach(e=>{
+    const matricule = generateMatricule(insc.dateInscription || todayStr(), insc.pereNom, insc.mereNom);
+    state.students.push({
+      id: uid(), matricule,
+      prenom: e.prenom||'', nom: e.nom||'', classe: e.classe||'', niveau: e.niveau||'Primaire',
+      sexe: e.sexe||'M', dateNaissance: e.dateNaissance||'', lieuNaissance: e.lieuNaissance||'',
+      statutClasse: 'Passant', reductionRedoublant: false,
+      fraisInscriptionActif: e.fraisInscriptionActif!==false,
+      pereNom: insc.pereNom||'', pereTel1: insc.pereTel1||'', pereTravail: insc.pereTravail||'',
+      mereNom: insc.mereNom||'', mereTel1: insc.mereTel1||'', mereTravail: insc.mereTravail||'',
+      parentEmail: insc.parentEmail||'', contactUrgence: insc.contactUrgence||'',
+      dateInscription: insc.dateInscription || todayStr(), arriere: 0,
+    });
+  });
+  await saveState();
+  try{
+    if(firestoreDb) await firestoreDb.collection('inscriptions_attente').doc(id).update({ statut:'validee' });
+  }catch(e){ console.warn('Impossible de marquer la demande comme validée en ligne (pas grave, elle est déjà intégrée localement).', e); }
+  validationEnAttente = validationEnAttente.filter(x=>x.id!==id);
+  render();
+  alert("Inscription validée : les élèves ont été ajoutés à la base, avec leur matricule.");
+}
+async function rejeterInscriptionAttente(id){
+  if(!(await confirmModal("Rejeter cette demande d'inscription ? Elle sera supprimée définitivement, sans créer de fiche élève."))) return;
+  try{
+    if(firestoreDb) await firestoreDb.collection('inscriptions_attente').doc(id).delete();
+  }catch(e){ console.warn(e); }
+  validationEnAttente = validationEnAttente.filter(x=>x.id!==id);
+  render();
+}
+function exportValidationPDF(){
+  if(validationEnAttente.length===0){ alert("Aucune inscription en attente à exporter."); return; }
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = nouveauPDF();
+    let y = pdfHeader(doc, "Inscriptions en attente de validation");
+    validationEnAttente.forEach(insc=>{
+      if(y>255){ doc.addPage(); y=20; }
+      const nomParents = [insc.pereNom, insc.mereNom].filter(Boolean).join(' & ') || 'Parent non renseigné';
+      doc.setFontSize(11); doc.setFont(undefined,'bold');
+      doc.text(nomParents, 14, y);
+      doc.setFont(undefined,'normal');
+      doc.setFontSize(9);
+      doc.text(`Tél : ${insc.pereTel1||insc.mereTel1||'—'}   Urgence : ${insc.contactUrgence||'—'}   Reçue le ${insc.dateSoumission?formatDateFR(insc.dateSoumission):'—'}`, 14, y+5);
+      doc.autoTable({
+        startY: y+9,
+        head: [['Enfant','Sexe','Naissance','Classe souhaitée','Niveau']],
+        body: (insc.enfants||[]).map(e=>[`${e.prenom} ${e.nom}`, e.sexe||'—', formatDateFR(e.dateNaissance), e.classe||'—', e.niveau||'—']),
+        styles:{font:'times', fontSize:9},
+        headStyles:{fillColor:[27,42,74]},
+      });
+      y = doc.lastAutoTable.finalY + 12;
+    });
+    pdfSignature(doc, y+6);
+    doc.save(`inscriptions-en-attente-${todayStr()}.pdf`);
   }catch(e){ alert("Export impossible : connecte-toi une fois à Internet pour charger l'outil d'export, puis réessaie."); }
 }
 
