@@ -1954,6 +1954,7 @@ async function saveSchoolSettings(){
     fraisInscriptionCollege: parseFloat(document.getElementById('f_fraisInscriptionCollege').value)||0,
   };
   await saveState();
+  syncFraisConfigVersFirestore();
   closeModal();
   render();
 }
@@ -2055,8 +2056,20 @@ async function saveFraisScolarite(){
   });
   state.fraisScolarite = newFrais;
   await saveState();
+  syncFraisConfigVersFirestore();
   closeModal();
   render();
+}
+/* Publie la grille des frais (scolarité + inscription) vers Firestore, pour que l'application d'inscription à distance puisse estimer un montant à payer */
+async function syncFraisConfigVersFirestore(){
+  if(!firestoreDb) return;
+  try{
+    await firestoreDb.collection('config').doc('frais').set({
+      fraisParClasse: state.fraisScolarite||{},
+      fraisInscriptionPrimaire: state.schoolInfo.fraisInscriptionPrimaire||0,
+      fraisInscriptionCollege: state.schoolInfo.fraisInscriptionCollege||0,
+    });
+  }catch(e){ console.warn("Impossible de publier les frais en ligne (pas grave, ça réessaiera à la prochaine sauvegarde).", e); }
 }
 /* Calcule le solde de scolarité d'un élève : frais annuel, total versé, restant dû */
 /* Un élève est considéré en abandon dès qu'un pointage "abandon" a été enregistré pour lui, une fois */
@@ -3164,12 +3177,13 @@ async function applyPromotion(){
   const ancienneAnnee = state.schoolInfo.anneeScolaire || 'année précédente';
 
   // 1. Report du solde en arriéré (calculé AVANT changement de classe, car il dépend des frais de la classe actuelle)
+  // Important : on reporte le restant APRÈS déduction des réductions accordées — une réduction n'est jamais un arriéré, seul l'impayé réel l'est.
   if(reporter){
     state.students.forEach(s=>{
-      const { restant } = soldeEleve(s);
-      s.arriere = Math.max(restant, 0);
+      s.arriere = Math.max(restantApresReduction(s), 0);
     });
     state.payments = [];
+    state.reductionsFamille = {}; // les réductions ont déjà été appliquées ci-dessus ; on repart propre pour la nouvelle année
   }
 
   // 2. Détermination automatique du statut Passant/Redoublant pour l'année suivante (basé sur la moyenne annuelle, avant réinitialisation des notes)
@@ -4467,12 +4481,13 @@ function renderInscriptionAttenteHtml(insc){
       ${doublons.length>0 ? `<p style="font-size:12.5px; color:var(--bordeaux); background:#FBEAEA; border:1px solid var(--bordeaux); border-radius:4px; padding:8px 10px; margin-bottom:10px;">⚠ Doublon possible : ${doublons.map(d=>escapeHtml(d.prenom+' '+d.nom)).join(', ')} semble déjà inscrit(e) dans la base. Vérifie avant de valider.</p>` : ''}
       <div style="overflow-x:auto;">
       <table>
-        <thead><tr><th>Enfant</th><th>Sexe</th><th>Naissance</th><th>Classe souhaitée</th><th>Niveau</th></tr></thead>
+        <thead><tr><th>Enfant</th><th>Sexe</th><th>Naissance</th><th>Classe souhaitée</th><th>Niveau</th><th>Versement initial (FCFA)</th></tr></thead>
         <tbody>
-          ${enfants.map(e=>`<tr${estDoublonPotentiel(e)?' style="background:#FBEAEA;"':''}><td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td><td>${e.sexe||'—'}</td><td class="mono">${formatDateFR(e.dateNaissance)}</td><td>${escapeHtml(e.classe)||'—'}</td><td>${e.niveau||'—'}</td></tr>`).join('')}
+          ${enfants.map((e,idx)=>`<tr${estDoublonPotentiel(e)?' style="background:#FBEAEA;"':''}><td>${escapeHtml(e.prenom)} ${escapeHtml(e.nom)}</td><td>${e.sexe||'—'}</td><td class="mono">${formatDateFR(e.dateNaissance)}</td><td>${escapeHtml(e.classe)||'—'}</td><td>${e.niveau||'—'}</td><td><input type="number" step="1" class="versement-initial-input" data-insc="${insc.id}" data-enfant="${idx}" placeholder="0" style="width:110px; padding:6px 8px; border:1.5px solid var(--line); border-radius:3px;"></td></tr>`).join('')}
         </tbody>
       </table>
       </div>
+      <p style="font-size:11.5px; color:var(--ink-soft); margin-top:8px;">Indique ici le montant que le parent vient de verser à l'administration pour chaque enfant (optionnel). Il sera automatiquement enregistré comme premier paiement dès la validation.</p>
       <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
         <button class="btn btn-primary btn-sm" onclick="validerInscriptionAttente('${insc.id}')">✅ Valider (paiement reçu à l'école)</button>
         <button class="btn btn-danger btn-sm" onclick="rejeterInscriptionAttente('${insc.id}')">🗑 Rejeter</button>
@@ -4490,9 +4505,9 @@ async function validerInscriptionAttente(id){
     ? `⚠ Attention : ${doublons.map(d=>d.prenom+' '+d.nom).join(', ')} semble déjà inscrit(e). ${messageBase}`
     : messageBase;
   if(!(await confirmModal(message))) return;
-  enfants.forEach(e=>{
+  enfants.forEach((e,idx)=>{
     const matricule = generateMatricule(insc.dateInscription || todayStr(), insc.pereNom, insc.mereNom);
-    state.students.push({
+    const newStudent = {
       id: uid(), matricule,
       prenom: e.prenom||'', nom: e.nom||'', classe: e.classe||'', niveau: e.niveau||'Primaire',
       sexe: e.sexe||'M', dateNaissance: e.dateNaissance||'', lieuNaissance: e.lieuNaissance||'',
@@ -4502,7 +4517,18 @@ async function validerInscriptionAttente(id){
       mereNom: insc.mereNom||'', mereTel1: insc.mereTel1||'', mereTravail: insc.mereTravail||'',
       parentEmail: insc.parentEmail||'', contactUrgence: insc.contactUrgence||'',
       dateInscription: insc.dateInscription || todayStr(), arriere: 0,
-    });
+    };
+    state.students.push(newStudent);
+    const inputVersement = document.querySelector(`.versement-initial-input[data-insc="${insc.id}"][data-enfant="${idx}"]`);
+    const versement = inputVersement ? parseFloat(inputVersement.value)||0 : 0;
+    if(versement > 0){
+      const payment = {
+        id: uid(), studentId: newStudent.id, motif: "Versement initial",
+        montant: versement, echeance: todayStr(), datePaiement: todayStr(), statut: 'paye'
+      };
+      state.payments.push(payment);
+      syncPaymentToFinances(payment);
+    }
   });
   await saveState();
   try{
@@ -4557,13 +4583,14 @@ function computeFamilyGroups(){
     const nomAffiche = [s.pereNom, s.mereNom].filter(Boolean).join(' & ') || '— Parent non renseigné —';
     const key = `${(s.pereNom||'').trim().toLowerCase()}|${(s.mereNom||'').trim().toLowerCase()}`;
     if(!groups[key]) groups[key] = {
-      key, nom:nomAffiche, tel:'', email:'', enfants:[],
+      key, nom:nomAffiche, tel:'', email:'', enfants:[], contactUrgence:'',
       pereNom:s.pereNom||'', pereTel1:s.pereTel1||'', pereTravail:s.pereTravail||'',
       mereNom:s.mereNom||'', mereTel1:s.mereTel1||'', mereTravail:s.mereTravail||'',
     };
     groups[key].enfants.push(s);
     if(!groups[key].tel) groups[key].tel = primaryParentPhone(s);
     if(!groups[key].email && s.parentEmail) groups[key].email = s.parentEmail;
+    if(!groups[key].contactUrgence && s.contactUrgence) groups[key].contactUrgence = s.contactUrgence;
   });
   return Object.values(groups).sort((a,b)=> a.nom.localeCompare(b.nom, 'fr'));
 }
@@ -4580,6 +4607,7 @@ function renderFamilles(){
   return `
     <div class="page-head">
       <div><h2>Parents &amp; enfants</h2><p>${list.length} parent(s)/tuteur(s) — enfants et état de paiement par famille</p></div>
+      <button class="btn btn-outline btn-sm" onclick="exportListeParentsPDF()">📄 Télécharger la liste des parents (PDF)</button>
     </div>
     <div class="toolbar">
       <div class="filters">
@@ -4596,7 +4624,10 @@ function renderFamilles(){
             <strong style="font-family:'Fraunces',serif; font-size:17px;">${escapeHtml(fam.nom)}</strong>
             <div class="mono" style="font-size:12.5px; color:var(--ink-soft); margin-top:3px;">${escapeHtml(fam.tel)||'Téléphone non renseigné'}${fam.email?' · '+escapeHtml(fam.email):''}</div>
           </div>
-          <span class="stamp-badge stamp-brass">${enfants.length} enfant${enfants.length>1?'s':''}</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <button class="btn btn-outline btn-sm" onclick="afficherInfosParent('${encodeURIComponent(fam.key)}')">ℹ️ Voir les infos</button>
+            <span class="stamp-badge stamp-brass">${enfants.length} enfant${enfants.length>1?'s':''}</span>
+          </div>
         </div>
         <table>
           <thead><tr><th>Enfant</th><th>Classe</th><th>Frais annuel</th><th>Arriéré</th><th>Versé</th><th>Statut</th></tr></thead>
@@ -4775,6 +4806,62 @@ async function startApp(){
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(()=>{ /* pas de service worker disponible en local, ce n'est pas bloquant */ });
   }
+}
+
+/* Affiche toutes les informations connues sur une famille (travail, téléphones, contact d'urgence...) */
+function afficherInfosParent(keyEncoded){
+  const fam = getFamilyGroupByKey(decodeURIComponent(keyEncoded));
+  if(!fam){ alert("Famille introuvable."); return; }
+  openModal(`
+    <h3>Informations complètes</h3>
+    <div style="border-top:1px solid var(--line); margin:10px 0 12px; padding-top:10px;">
+      <p style="font-size:12.5px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin:0 0 8px;">Père</p>
+      <p style="margin:2px 0;">${escapeHtml(fam.pereNom)||'—'}</p>
+      <p style="margin:2px 0;" class="mono">Téléphone : ${escapeHtml(fam.pereTel1)||'—'}</p>
+      <p style="margin:2px 0;">Travail : ${escapeHtml(fam.pereTravail)||'—'}</p>
+    </div>
+    <div style="border-top:1px solid var(--line); margin-bottom:12px; padding-top:10px;">
+      <p style="font-size:12.5px; font-weight:600; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.04em; margin:0 0 8px;">Mère</p>
+      <p style="margin:2px 0;">${escapeHtml(fam.mereNom)||'—'}</p>
+      <p style="margin:2px 0;" class="mono">Téléphone : ${escapeHtml(fam.mereTel1)||'—'}</p>
+      <p style="margin:2px 0;">Travail : ${escapeHtml(fam.mereTravail)||'—'}</p>
+    </div>
+    <div style="border-top:1px solid var(--line); padding-top:10px;">
+      <p style="margin:2px 0;">Email : ${escapeHtml(fam.email)||'—'}</p>
+      <p style="margin:2px 0; color:var(--bordeaux);">Contact en cas d'urgence : ${escapeHtml(fam.contactUrgence)||'—'}</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal()">Fermer</button>
+    </div>
+  `);
+}
+/* Exporte en PDF la liste de toutes les familles avec leurs informations et leurs enfants */
+function exportListeParentsPDF(){
+  const list = computeFamilyGroups();
+  if(list.length===0){ alert("Aucun parent à exporter."); return; }
+  try{
+    const doc = nouveauPDF();
+    let y = pdfHeader(doc, "Liste des parents d'élèves");
+    list.forEach(fam=>{
+      if(y>250){ doc.addPage(); y=20; }
+      doc.setFontSize(12); doc.setFont(undefined,'bold');
+      doc.text(fam.nom, 14, y);
+      doc.setFont(undefined,'normal');
+      doc.setFontSize(9);
+      doc.text(`Père : ${fam.pereTel1||'—'} (${fam.pereTravail||'—'})   Mère : ${fam.mereTel1||'—'} (${fam.mereTravail||'—'})`, 14, y+5);
+      doc.text(`Urgence : ${fam.contactUrgence||'—'}   Email : ${fam.email||'—'}`, 14, y+10);
+      doc.autoTable({
+        startY: y+14,
+        head: [['Enfant','Classe','Sexe']],
+        body: sortStudents(fam.enfants).map(s=>[`${s.prenom} ${s.nom}`, s.classe||'—', s.sexe||'—']),
+        styles:{font:'times', fontSize:9},
+        headStyles:{fillColor:[27,42,74]},
+      });
+      y = doc.lastAutoTable.finalY + 12;
+    });
+    pdfSignature(doc, y+6);
+    doc.save(`liste-parents-${todayStr()}.pdf`);
+  }catch(e){ alert("Export impossible : connecte-toi une fois à Internet pour charger l'outil d'export, puis réessaie."); }
 }
 
 /* ============ INIT ============ */
