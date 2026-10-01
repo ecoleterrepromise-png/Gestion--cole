@@ -4803,6 +4803,7 @@ async function startApp(){
   catch(e){ console.warn('Chargement initial impossible, démarrage avec un registre vide.', e); }
   buildShell();
   render();
+  syncFraisConfigVersFirestore();
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(()=>{ /* pas de service worker disponible en local, ce n'est pas bloquant */ });
   }
